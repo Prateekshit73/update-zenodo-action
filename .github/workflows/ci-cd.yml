@@ -1,0 +1,350 @@
+name: CI/CD
+
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - dev
+      - main
+      - v1
+  push:
+    branches:
+      - dev
+      - main
+      - v1
+    tags:
+      - 'v*'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Update pre-commit hooks']
+    branches:
+      - update-pre-commit-hooks
+    types:
+      - completed
+
+env:
+  FORCE_COLOR: 1
+
+concurrency:
+  cancel-in-progress: ${{ !contains(fromJSON('["dev", "main", "v1"]'), github.ref_name) }}
+  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+
+jobs:
+  pre-commit:
+    name: Run pre-commit
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          check-latest: true
+          python-version: '3.13'
+
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.1
+
+#  code-ql:
+#    name: CodeQL
+#    needs:
+#      - pre-commit
+#    permissions:
+#      security-events: write
+#    runs-on: ubuntu-24.04
+#    steps:
+#      - name: Check out repository
+#        uses: actions/checkout@v4
+#
+#      - name: Initialize CodeQL
+#        uses: github/codeql-action/init@v3
+#        with:
+#          languages: python
+#
+#      - name: Perform CodeQL Analysis
+#        uses: github/codeql-action/analyze@v3
+#        with:
+#          category: '/language:python'
+
+#  test:
+#    name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
+#    runs-on: ${{ matrix.os }}
+#    needs:
+#      - pre-commit
+#    strategy:
+#      matrix:
+#        os:
+#          - macos-latest
+#          - ubuntu-latest
+#          - windows-latest
+#        python-version:
+#          - '3.9'
+#          - '3.10'
+#          - '3.11'
+#          - '3.12'
+#          - '3.13'
+#    steps:
+#      - name: Check out repository
+#        uses: actions/checkout@v4
+#
+#      - name: Set up Python ${{ matrix.python-version }}
+#        uses: actions/setup-python@v5
+#        with:
+#          allow-prereleases: true
+#          cache: pip
+#          cache-dependency-path: |
+#            requirements/runtime.txt
+#            requirements/tests.txt
+#          check-latest: true
+#          python-version: ${{ matrix.python-version }}
+#
+#      - name: Install dependencies
+#        run: |
+#          python -m pip install --upgrade pip
+#          python -m pip install --requirement requirements/tests.txt
+#          python -m pip install .
+#
+#      - name: Run tests
+#        run: |
+#          make test
+#
+#      - name: Upload coverage to Codecov
+#        uses: codecov/codecov-action@v5
+#        with:
+#          token: ${{ secrets.CODECOV_TOKEN }}
+
+  build:
+    name: Build distribution
+#    needs: test
+    needs: pre-commit
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          cache: pip
+          cache-dependency-path: |
+            requirements/build.txt
+          check-latest: true
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements/build.txt
+          python -m pip install .
+
+      - name: Build distribution
+        run: |
+          make package
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Set version
+        if: startsWith(github.event.ref, 'refs/tags/v')
+        run: echo "VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')" >> $GITHUB_ENV
+
+      - name: Generate SBOM
+        if: startsWith(github.event.ref, 'refs/tags/v')
+        run: |
+          make sbom > holidays-${{ env.VERSION }}-sbom.json
+
+      - name: Upload SBOM
+        if: startsWith(github.event.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: holidays-${{ env.VERSION }}-sbom.json
+
+#  test-build:
+#    name: Test build on ${{ matrix.os }}
+#    runs-on: ${{ matrix.os }}
+#    needs: build
+#    strategy:
+#      matrix:
+#        os:
+#          - macos-latest
+#          - ubuntu-latest
+#          - windows-latest
+#    steps:
+#      - name: Check out repository
+#        uses: actions/checkout@v4
+#
+#      - name: Set up Python
+#        uses: actions/setup-python@v5
+#        with:
+#          cache: pip
+#          cache-dependency-path: |
+#            requirements/runtime.txt
+#            requirements/tests.txt
+#          check-latest: true
+#          python-version: '3.13'
+#
+#      - name: Get package artifacts
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: dist
+#          path: dist
+#
+#      - name: Run tests
+#        shell: bash
+#        run: |
+#          rm -rf holidays
+#          python -m pip install --requirement requirements/tests.txt
+#          python -m pip install `ls dist/*.whl`
+#          pytest --dist loadscope --numprocesses auto tests/countries tests/financial
+#          python -m pip uninstall -y holidays python-dateutil six
+#          python -m pip install `ls dist/*.tar.gz`
+#          pytest --dist loadscope --numprocesses auto tests/countries tests/financial
+#
+#  test-docs:
+#    name: Test docs build
+#    runs-on: ubuntu-24.04
+#    needs: test
+#    steps:
+#      - name: Check out repository
+#        uses: actions/checkout@v4
+#
+#      - name: Set Up Python
+#        uses: actions/setup-python@v5
+#        with:
+#          cache: pip
+#          cache-dependency-path: requirements/docs.txt
+#          python-version: '3.13'
+#
+#      - name: Install dependencies
+#        run: |
+#          python -m pip install --requirement requirements/docs.txt
+#          python -m pip install .
+#
+#      - name: Build docs
+#        run: |
+#          make doc
+
+#  publish-main:
+#    name: Publish generated artifacts
+#    if: |
+#      github.repository == 'vacanza/holidays' &&
+#      github.event_name == 'push' &&
+#      startsWith(github.event.ref, 'refs/tags/v')
+#    environment: main
+#    needs:
+#      - test-build
+#      - test-docs
+#    permissions:
+#      contents: write
+#      id-token: write
+#    runs-on: ubuntu-24.04
+#    steps:
+#      - name: Download package artifacts
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: dist
+#          path: dist
+#
+#      - name: Publish package distributions to PyPI
+#        uses: pypa/gh-action-pypi-publish@release/v1
+
+  sign-artifacts:
+    name: Create SHA1 checksums and Sigstore signatures
+    runs-on: ubuntu-24.04
+    needs:
+#      - publish-main
+      - build
+    permissions:
+      id-token: write
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Compute SHA1 checksums
+        run: |
+          cd dist
+          for file in *; do
+            sha1sum "$file" > "$file.sha1"
+          done
+
+      - name: Sign the files using Sigstore
+        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        with:
+          inputs: |
+            ./dist/*.tar.gz
+            ./dist/*.whl
+
+      - name: Upload package dist and signatures
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-artifacts
+          path: dist
+
+  upload-to-zenodo:
+    name: Publish release to Zenodo
+#    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    needs:
+      - sign-artifacts
+    permissions:
+      contents: write
+    env:
+      AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_TOKEN }}'
+      ZENODO_URL: 'https://sandbox.zenodo.org/api/deposit/depositions'
+#      VERSION: '${{ github.ref_name }}'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+#      - name: Download SBOM
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: sbom
+
+      - name: Download signed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-artifacts
+          path: dist
+
+      - name: Upload to Zenodo
+        id: upload
+        uses: ./.github/actions/zenodo-upload
+        with:
+          token: ${{ secrets.ZENODO_TOKEN }}
+          files: ${{ env.FILES }}
+          sandbox: "false"
+
+#  update-github-release:
+#    name: Update GitHub release with SBOM and signed artifacts
+#    runs-on: ubuntu-24.04
+#    needs:
+#      - sign-artifacts
+#    permissions:
+#      contents: write
+#    steps:
+#      - name: Download SBOM
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: sbom
+#
+#      - name: Download package dist and signatures
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: signed-artifacts
+#          path: dist
+#
+#      - name: Update Github release
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        run: |
+#          gh release upload --repo vacanza/holidays ${{ github.ref_name }} dist/*
+#          gh release upload --repo vacanza/holidays ${{ github.ref_name }} holidays-*-sbom.json
