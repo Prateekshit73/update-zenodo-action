@@ -28,6 +28,8 @@ jobs:
 
   upload-to-zenodo:
     name: Publish release to Zenodo
+    needs:
+      - pre-commit
     runs-on: ubuntu-latest
     env:
       AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_TOKEN }}'
