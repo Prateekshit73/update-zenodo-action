@@ -27,26 +27,31 @@ jobs:
           python -m pip install -r .github/actions/zenodo-upload/requirements.txt
 
   upload-to-zenodo:
-    needs: pre-commit
     runs-on: ubuntu-latest
+    name: A job to update metadata and push a release to Zenodo
+
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v3
+      # This step is not needed at the moment but I might decide to add more steps in the future
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          path: dist/
+          node-version: 16
 
-      - name: Prepare release archive
-        run: |
-          zip -r release-artifacts-${{ github.ref_name }}.zip dist/*
-          echo "FILES=release-artifacts-${{ github.ref_name }}.zip" >> $GITHUB_ENV
-
-      - name: Update Zenodo deposition
-        uses: vacanza/update-zenodo-action@v1
+      - name: Upload to Zenodo
+        id: release
+        uses: megasanjay/upload-to-zenodo@v2.0.1
         with:
-          token: ${{ secrets.ZENODO_TOKEN }}
-          files: ${{ env.FILES }}
-          concept_id: ${{ secrets.ZENODO_CONCEPT_ID }}
-          metadata_file: "CITATION.cff"
-          sandbox: "false"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          zenodo_token: ${{ secrets.ZENODO_TOKEN }}
+          zenodo_deposition_id: SOME_DEPOSITION_ID
+          zenodo_publish: true
+          zenodo_sandbox: false
+          commit_message: 'chore: update ${file_name} for Zenodo release'
+          update_metadata_files: true
+          codemeta_json: true
+          citation_cff: true
+          zenodo_json: true
+
+      # Get the doi from the `release` step
+      - name: Get the output doi
+        run: echo "The released doi was ${{ steps.release.outputs.doi }}"
