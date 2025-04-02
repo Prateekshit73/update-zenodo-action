@@ -27,7 +27,6 @@ jobs:
           python -m pip install -r .github/actions/zenodo-upload/requirements.txt
 
   upload-to-zenodo:
-    needs: update-github-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
