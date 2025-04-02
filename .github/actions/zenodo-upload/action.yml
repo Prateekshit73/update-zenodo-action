@@ -1,41 +1,20 @@
-# update-zenodo-action/action.yml
-name: 'Update Zenodo Deposition'
-description: 'Automates Zenodo deposition updates for software releases'
+name: 'Zenodo Upload'
+description: 'Uploads release artifacts to Zenodo'
 inputs:
   token:
     description: 'Zenodo API token'
     required: true
-  files:
-    description: 'Comma-separated list of files to upload'
-    required: true
-  concept_id:
-    description: 'Zenodo concept ID for versioning'
-    required: true
-  metadata_file:
-    description: 'Path to metadata file (e.g., CITATION.cff)'
-    default: 'CITATION.cff'
   sandbox:
-    description: 'Use Zenodo sandbox'
+    description: 'Use Zenodo sandbox (true/false)'
     default: 'true'
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-        
-    - name: Install dependencies
-      run: pip install -r ${{ github.action_path }}/requirements.txt
+    - run: pip install -r ${{ github.action_path }}/requirements.txt
       shell: bash
-      
-    - name: Run Zenodo upload
-      id: upload
+    - id: upload
       run: python ${{ github.action_path }}/zenodo_upload.py
       shell: bash
       env:
         ZENODO_TOKEN: ${{ inputs.token }}
-        ZENODO_FILES: ${{ inputs.files }}
-        ZENODO_CONCEPT_ID: ${{ inputs.concept_id }}
-        ZENODO_METADATA_FILE: ${{ inputs.metadata_file }}
         ZENODO_SANDBOX: ${{ inputs.sandbox }}
