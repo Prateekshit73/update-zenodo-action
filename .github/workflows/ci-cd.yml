@@ -27,22 +27,26 @@ jobs:
           python -m pip install -r .github/actions/zenodo-upload/requirements.txt
 
   upload-to-zenodo:
-    name: Publish release to Zenodo
-    needs:
-      - pre-commit
+    needs: update-github-release
     runs-on: ubuntu-latest
-    env:
-      AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_TOKEN }}'
-      ZENODO_URL: 'https://sandbox.zenodo.org/api/deposit/depositions'
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Upload to Zenodo
-        id: upload
-        uses: ./.github/actions/zenodo-upload
+      - uses: actions/checkout@v3
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
         with:
-          token: '${{ secrets.ZENODO_TOKEN }}'
-          files: '${{ env.FILES }}'
-          sandbox: 'true'
-    permissions:
-      contents: write
+          path: dist/
+
+      - name: Prepare release archive
+        run: |
+          zip -r release-artifacts-${{ github.ref_name }}.zip dist/*
+          echo "FILES=release-artifacts-${{ github.ref_name }}.zip" >> $GITHUB_ENV
+
+      - name: Update Zenodo deposition
+        uses: vacanza/update-zenodo-action@v1
+        with:
+          token: ${{ secrets.ZENODO_TOKEN }}
+          files: ${{ env.FILES }}
+          concept_id: ${{ secrets.ZENODO_CONCEPT_ID }}
+          metadata_file: "CITATION.cff"
+          sandbox: "false"
