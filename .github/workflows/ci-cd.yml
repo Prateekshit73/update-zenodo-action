@@ -1,0 +1,48 @@
+name: CI/CD
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  FORCE_COLOR: 1
+
+jobs:
+  pre-commit:
+    name: Run pre-commit
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          check-latest: true
+          python-version: '3.13'
+
+      - name: Install dependencies for zenodo-upload
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r .github/actions/zenodo-upload/requirements.txt
+
+  upload-to-zenodo:
+    name: Publish release to Zenodo
+    needs:
+      - pre-commit
+    runs-on: ubuntu-latest
+    env:
+      AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_TOKEN }}'
+      ZENODO_URL: 'https://sandbox.zenodo.org/api/deposit/depositions'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Upload to Zenodo
+        id: upload
+        uses: ./.github/actions/zenodo-upload
+        with:
+          token: '${{ secrets.ZENODO_TOKEN }}'
+          files: '${{ env.FILES }}'
+          sandbox: 'true'
+    permissions:
+      contents: write
