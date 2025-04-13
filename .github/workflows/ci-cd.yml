@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_TOKEN }}'
-      ZENODO_URL: 'https://sandbox.zenodo.org/api/deposit/depositions'
+      ZENODO_URL: 'https://zenodo.org/api/deposit/depositions'
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
