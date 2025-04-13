@@ -66,13 +66,15 @@ class PublicReleaseDownloader:
 
     def _zenodo_operation(self, method: str, url: str, **kwargs) -> requests.Response:
         """Perform Zenodo API operation with retries"""
+        headers = kwargs.pop("headers", {"Content-Type": "application/json"})
+
         for attempt in range(CONFIG["MAX_RETRIES"]):
             try:
                 response = requests.request(
                     method,
                     url,
                     params={"access_token": self.zenodo_token},
-                    headers={"Content-Type": "application/json"},
+                    headers=headers,
                     **kwargs
                 )
                 response.raise_for_status()
@@ -167,11 +169,13 @@ class PublicReleaseDownloader:
                 local_path = self.download_artifact(artifact)
                 try:
                     with open(local_path, "rb") as f:
+                        # Zenodo requires multipart/form-data with explicit filename
                         self._zenodo_operation(
                             "POST",
                             f"{CONFIG['ZENODO_API']}/{deposition_id}/files",
+                            headers={},  # Let requests set Content-Type
                             data={"name": os.path.basename(local_path)},
-                            files={"file": f}
+                            files={"file": (os.path.basename(local_path), f)}
                         )
                 finally:
                     os.remove(local_path)  # Cleanup
