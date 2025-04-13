@@ -43,6 +43,7 @@ class PublicReleaseDownloader:
         self.version = self._get_latest_version()
         self.session = requests.Session()
         self.zenodo_token = os.getenv("ZENODO_TOKEN")
+        self.zenodo_version = f"v{self.version}"  # Maintain 'v' prefix for Zenodo
 
     def _get_latest_version(self) -> str:
         """Get latest release version from GitHub API without authentication"""
@@ -117,13 +118,14 @@ class PublicReleaseDownloader:
             return
 
         try:
-            # Get existing deposition
+            # Get existing depositions
             response = self._zenodo_operation("GET", CONFIG["ZENODO_API"])
+            depositions = response.json()
 
-            # Find latest concept ID for versioning
+            # Find matching concept ID using Zenodo's version format
             concept_id = next(
-                (dep["conceptrecid"] for dep in response.json()
-                 if dep["metadata"]["version"] == self.version),
+                (dep["conceptrecid"] for dep in depositions
+                 if dep.get("metadata", {}).get("version") == self.zenodo_version),
                 None
             )
 
@@ -140,34 +142,39 @@ class PublicReleaseDownloader:
                     "POST", CONFIG["ZENODO_API"],
                     json={
                         "metadata": {
-                            "title": f"Holidays {self.version}",
-                            "version": self.version,
+                            "title": f"Holidays {self.zenodo_version}",
+                            "version": self.zenodo_version,
                             "upload_type": "software",
                             "description": "Country-specific holiday management library",
                             "creators": [{
                                 "name": "Vacanza Team",
                                 "affiliation": "Open Source Community"
-                            }]
+                            }],
+                            "license": "mit"
                         }
                     }
                 )
                 deposition_id = response.json()["id"]
 
-            # Upload artifacts
+            # Upload artifacts with correct filenames
             artifacts = [
                 f"holidays-{self.version}-sbom.json",
-                f"v{self.version}.tar.gz",
-                f"v{self.version}.whl"
+                f"holidays-{self.version}.tar.gz",
+                f"holidays-{self.version}-py3-none-any.whl"
             ]
 
             for artifact in artifacts:
                 local_path = self.download_artifact(artifact)
-                self._zenodo_operation(
-                    "POST",
-                    f"{CONFIG['ZENODO_API']}/{deposition_id}/files",
-                    files={"file": open(local_path, "rb")}
-                )
-                os.remove(local_path)  # Cleanup
+                try:
+                    with open(local_path, "rb") as f:
+                        self._zenodo_operation(
+                            "POST",
+                            f"{CONFIG['ZENODO_API']}/{deposition_id}/files",
+                            data={"name": os.path.basename(local_path)},
+                            files={"file": f}
+                        )
+                finally:
+                    os.remove(local_path)  # Cleanup
 
             # Publish deposition
             self._zenodo_operation(
@@ -188,9 +195,9 @@ def main() -> None:
 
         # Download standard artifacts
         artifacts = [
-            f"holidays-{downloader.version}-sbom.json",  # SBOM file
-            f"holidays-{downloader.version}.tar.gz",      # Tarball
-            f"holidays-{downloader.version}-py3-none-any.whl"  # Wheel file
+            f"holidays-{downloader.version}-sbom.json",
+            f"holidays-{downloader.version}.tar.gz",
+            f"holidays-{downloader.version}-py3-none-any.whl"
         ]
 
         for artifact in artifacts:
