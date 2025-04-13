@@ -32,7 +32,7 @@ jobs:
       - pre-commit
     runs-on: ubuntu-latest
     env:
-      AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_TOKEN }}'
+      AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_SAND_TOKEN }}'
       ZENODO_URL: 'https://sandbox.zenodo.org/api/deposit/depositions'
     steps:
       - name: Check out repository

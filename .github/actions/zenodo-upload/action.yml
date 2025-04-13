@@ -16,5 +16,4 @@ runs:
       run: python ${{ github.action_path }}/zenodo_upload.py
       shell: bash
       env:
-        ZENODO_TOKEN: ${{ inputs.token }}
         ZENODO_SANDBOX: ${{ inputs.sandbox }}
