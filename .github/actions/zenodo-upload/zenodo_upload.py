@@ -188,9 +188,9 @@ def main() -> None:
 
         # Download standard artifacts
         artifacts = [
-            f"holidays-{downloader.version}-sbom.json",
-            f"v{downloader.version}.tar.gz",
-            f"v{downloader.version}.whl"
+            f"holidays-{downloader.version}-sbom.json",  # SBOM file
+            f"holidays-{downloader.version}.tar.gz",      # Tarball
+            f"holidays-{downloader.version}-py3-none-any.whl"  # Wheel file
         ]
 
         for artifact in artifacts:
