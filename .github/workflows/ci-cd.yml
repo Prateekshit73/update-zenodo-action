@@ -32,8 +32,8 @@ jobs:
       - pre-commit
     runs-on: ubuntu-latest
     env:
-      AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_SAND_TOKEN }}'
-      ZENODO_URL: 'https://sandbox.zenodo.org/api/deposit/depositions'
+      AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_TOKEN }}'
+      ZENODO_URL: 'https://zenodo.org/api/deposit/depositions'
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
         id: upload
         uses: ./.github/actions/zenodo-upload
         with:
-          token: '${{ secrets.ZENODO_SAND_TOKEN }}'
+          token: '${{ secrets.ZENODO_TOKEN }}'
           files: '${{ env.FILES }}'
           sandbox: 'true'
     permissions:
