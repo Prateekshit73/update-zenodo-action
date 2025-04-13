@@ -41,7 +41,7 @@ jobs:
         id: upload
         uses: ./.github/actions/zenodo-upload
         with:
-          token: '${{ secrets.ZENODO_TOKEN }}'
+          token: '${{ secrets.ZENODO_SAND_TOKEN }}'
           files: '${{ env.FILES }}'
           sandbox: 'true'
     permissions:
