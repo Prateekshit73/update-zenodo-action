@@ -18,8 +18,8 @@ import sys
 import requests
 import yaml
 
-ACCESS_TOKEN = os.getenv("ZENODO_TOKEN")
-r = requests.get('https://zenodo.org/api/deposit/depositions',
+ACCESS_TOKEN = os.getenv("ZENODO_SAND_TOKEN")
+r = requests.get('https://sandbox.zenodo.org/api/deposit/depositions',
                   params={'access_token': ACCESS_TOKEN})
 print(r.status_code)
 # 200
