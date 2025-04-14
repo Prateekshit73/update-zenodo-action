@@ -1,141 +1,48 @@
 name: CI/CD
-
 on:
-  merge_group:
-  pull_request:
-    branches:
-      - dev
-      - main
-      - v1
   push:
-    branches:
-      - dev
-      - main
-      - v1
     tags:
       - 'v*'
-  workflow_dispatch:
-  workflow_run:
-    workflows: ['Update pre-commit hooks']
-    branches:
-      - update-pre-commit-hooks
-    types:
-      - completed
 
 env:
   FORCE_COLOR: 1
 
-concurrency:
-  cancel-in-progress: ${{ !contains(fromJSON('["dev", "main", "v1"]'), github.ref_name) }}
-  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
-
 jobs:
-  build:
-    name: Build distribution
+  pre-commit:
+    name: Run pre-commit
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55
+        uses: actions/setup-python@v5
         with:
-          cache: pip
-          cache-dependency-path: |
-            requirements/build.txt
           check-latest: true
-          python-version: '3.12'
+          python-version: '3.13'
 
-      - name: Install dependencies
+      - name: Install dependencies for zenodo-upload
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements/build.txt
-          python -m pip install .
-      - name: Build distribution
-        run: |
-          make package
-      - name: Upload package artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: dist
-          path: dist
-
-      - name: Set version
-        if: startsWith(github.event.ref, 'refs/tags/v')
-        run: echo "VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')" >> $GITHUB_ENV
-
-      - name: Generate SBOM
-        if: startsWith(github.event.ref, 'refs/tags/v')
-        run: |
-          make sbom > holidays-${{ env.VERSION }}-sbom.json
-      - name: Upload SBOM
-        if: startsWith(github.event.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: sbom
-          path: holidays-${{ env.VERSION }}-sbom.json
-
-  sign-artifacts:
-    name: Create SHA1 checksums and Sigstore signatures
-    runs-on: ubuntu-24.04
-    needs:
-      - build
-    permissions:
-      id-token: write
-    steps:
-      - name: Download package artifacts
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
-        with:
-          name: dist
-          path: dist
-
-      - name: Compute SHA1 checksums
-        run: |
-          cd dist
-          for file in *; do
-            sha1sum "$file" > "$file.sha1"
-          done
-      - name: Sign the files using Sigstore
-        uses: sigstore/gh-action-sigstore-python@f514d46b907ebcd5bedc05145c03b69c1edd8b46
-        with:
-          inputs: |
-            ./dist/*.tar.gz
-            ./dist/*.whl
-      - name: Upload package dist and signatures
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: signed-artifacts
-          path: dist
+          python -m pip install -r .github/zenodo-upload/requirements.txt
 
   upload-to-zenodo:
     name: Publish release to Zenodo
+    needs:
+      - pre-commit
     runs-on: ubuntu-latest
     env:
-      ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
-      GITHUB_REPOSITORY: ${{ github.repository }}
-    needs:
-      - sign-artifacts
+      AUTH: 'Authorization: Bearer ${{ secrets.ZENODO_TOKEN }}'
+      ZENODO_URL: 'https://zenodo.org/api/deposit/depositions'
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Download signed artifacts
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
-        with:
-          name: signed-artifacts
-          path: dist
-
-      - name: Prepare release archive
-        run: |
-          mv dist/*.tar.gz dist/*.whl .
-          files=$(echo *.tar.gz *.whl)
-          echo "FILE_LIST=$files" >> $GITHUB_ENV
+        uses: actions/checkout@v4
       - name: Upload to Zenodo
-        uses: Prateekshit73/update-zenodo@test-zenodo
+        id: upload
+        uses: ./.github/zenodo-upload
         with:
-          token: ${{ secrets.ZENODO_TOKEN }}
-          filenames: ${{ env.FILE_LIST }}
-          metadata: CITATION.cff
+          token: '${{ secrets.ZENODO_TOKEN }}'
+          files: '${{ env.FILES }}'
           sandbox: 'true'
-          publish: 'true'
-        run: python .github/zenodo-upload/zenodo_upload.py
+    permissions:
+      contents: write
