@@ -1,0 +1,8 @@
+[project]
+name = "Zenodo Upload"
+description = "Uploads release to Zenodo"
+license = "MIT"
+
+[tool.ruff]
+line-length = 99
+target-version = "py313"
