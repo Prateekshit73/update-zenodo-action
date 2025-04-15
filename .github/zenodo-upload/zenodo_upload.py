@@ -121,7 +121,7 @@ class PublicReleaseDownloader:
     def _parse_citation(self) -> dict:
         """Parse CITATION.cff file for metadata"""
         try:
-            with open("CITATION.CFF", "r") as f:
+            with open("CITATION.cff", "r") as f:
                 citation = yaml.safe_load(f)
             return {
                 "title": citation.get("title", f"Holidays {self.zenodo_version}"),
@@ -134,7 +134,7 @@ class PublicReleaseDownloader:
             }
 
         except Exception as e:
-            logger.error(f"Failed to parse CITATION.CFF: {str(e)}")
+            logger.error(f"Failed to parse CITATION.cff: {str(e)}")
             raise
 
     def update_zenodo(self) -> None:
@@ -165,7 +165,7 @@ class PublicReleaseDownloader:
                 logger.info(f"Deleting previous version {deposition_id}")
                 self._zenodo_operation("DELETE", f"{CONFIG['ZENODO_API']}/{deposition_id}")
 
-            # Create new deposition with CFF metadata
+            # Create new deposition with cff metadata
             logger.info("Creating new Zenodo record")
             deposition_data = {
                 "metadata": {
