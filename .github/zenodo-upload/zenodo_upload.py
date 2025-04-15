@@ -34,6 +34,8 @@ CONFIG = {
         "https://github.com/vacanza/holidays/releases/download"
     ),
     "ZENODO_API": os.getenv("ZENODO_API", "https://zenodo.org/api/deposit/depositions"),
+    "REPO_OWNER": os.getenv("REPO_OWNER", "vacanza"),
+    "REPO_NAME": os.getenv("REPO_NAME", "holidays"),
     "MAX_RETRIES": 3,
     "RETRY_DELAY": 5
 }
