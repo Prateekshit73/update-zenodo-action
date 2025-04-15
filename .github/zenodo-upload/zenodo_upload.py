@@ -121,8 +121,19 @@ class PublicReleaseDownloader:
     def _parse_citation(self) -> dict:
         """Parse CITATION.cff file for metadata"""
         try:
-            with open("CITATION.cff", "r") as f:
+            # Get the script's directory
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            cff_path = os.path.join(script_dir, "CITATION.cff")
+
+            logger.info(f"Looking for CITATION.cff at: {cff_path}")
+
+            if not os.path.exists(cff_path):
+                raise FileNotFoundError(f"CITATION.cff not found at {cff_path}")
+
+            with open(cff_path, "r") as f:
                 citation = yaml.safe_load(f)
+
+            logger.info(f"Successfully parsed CITATION.cff from {cff_path}")
             return {
                 "title": citation.get("title", f"Holidays {self.zenodo_version}"),
                 "description": citation.get("abstract", "Country-specific holiday management library"),
@@ -132,9 +143,8 @@ class PublicReleaseDownloader:
                 "keywords": citation.get("keywords", []),
                 "doi": citation.get("doi", "")
             }
-
         except Exception as e:
-            logger.error(f"Failed to parse CITATION.cff: {str(e)}")
+            logger.error(f"Failed to process CITATION.cff: {str(e)}")
             raise
 
     def update_zenodo(self) -> None:
@@ -223,6 +233,13 @@ class PublicReleaseDownloader:
 def main() -> None:
     """Main execution flow"""
     try:
+        # Verify CITATION.cff exists in the script's directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        cff_path = os.path.join(script_dir, "CITATION.cff")
+
+        if not os.path.exists(cff_path):
+            raise FileNotFoundError(f"Required CITATION.cff not found at {cff_path}")
+
         downloader = PublicReleaseDownloader()
 
         # Download standard artifacts
