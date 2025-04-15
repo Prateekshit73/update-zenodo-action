@@ -1,131 +1,221 @@
+#  holidays
+#  --------
+#  A fast, efficient Python library for generating country, province and state
+#  specific sets of holidays on the fly. It aims to make determining whether a
+#  specific date is a holiday as fast and flexible as possible.
+#
+#  Authors: Vacanza Team and individual contributors (see AUTHORS file)
+#           dr-prodigy <dr.prodigy.github@gmail.com> (c) 2017-2023
+#           ryanss <ryanssdev@icloud.com> (c) 2014-2017
+#  Website: https://github.com/vacanza/holidays
+#  License: MIT (see LICENSE file)
+
 import logging
 import os
 import re
 import time
-import yaml
 from urllib.parse import urljoin
 import requests
 
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
+# Configuration
+CONFIG = {
+    "REPO_OWNER": "vacanza",
+    "REPO_NAME": "holidays",
+    "GITHUB_API": "https://api.github.com/repos",
+    "BASE_DOWNLOAD_URL": "https://github.com/vacanza/holidays/releases/download",
+    "ZENODO_API": "https://zenodo.org/api/deposit/depositions",
+    "MAX_RETRIES": 3,
+    "RETRY_DELAY": 5
+}
 
-class ZenodoPublisher:
-    """Handle Zenodo publications with dynamic configuration"""
+
+class PublicReleaseDownloader:
+    """Manage public GitHub releases and Zenodo depositions"""
 
     def __init__(self):
-        self.base_url = os.getenv("FILENAMES")
-        self.version = self._get_normalized_version()
-        self.zenodo_token = os.getenv("ZENODO_TOKEN")
-        self.filenames = os.getenv("FILENAMES", "").split()
-        self.metadata = self._load_citation_metadata()
+        self.version = self._get_latest_version()
         self.session = requests.Session()
+        self.zenodo_token = os.getenv("ZENODO_TOKEN")
+        self.zenodo_version = f"v{self.version}"  # Maintain 'v' prefix for Zenodo
 
-    def _get_normalized_version(self) -> str:
-        """Get version from GitHub tag or CITATION.cff"""
-        tag_ref = os.getenv("GITHUB_REF", "")
-        if version := re.sub(r'^refs/tags/v?', '', tag_ref):
-            return version
-        return self.metadata.get("version", "0.0.0").lstrip("v")
-
-    def _load_citation_metadata(self) -> dict:
-        """Load metadata from CITATION.cff if available"""
+    def _get_latest_version(self) -> str:
+        """Get latest release version from GitHub API without authentication"""
         try:
-            with open("CITATION.cff", "r") as f:
-                return yaml.safe_load(f)
-        except Exception as e:
-            logger.warning(f"Couldn't load CITATION.cff: {str(e)}")
-            return {}
+            url = f"{CONFIG['GITHUB_API']}/{CONFIG['REPO_OWNER']}/{CONFIG['REPO_NAME']}/releases/latest"
+            response = requests.get(url)
+            response.raise_for_status()
 
-    def _zenodo_request(self, method, endpoint, **kwargs):
-        """Universal Zenodo API handler"""
-        url = f"https://zenodo.org/api/deposit/depositions{endpoint}"
+            tag_name = response.json()["tag_name"]
+            version = re.sub(r'^v', '', tag_name)  # Normalize version
+            logger.info(f"Detected latest version: {version}")
+            return version
+
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch releases: {str(e)}")
+            raise
+        except KeyError:
+            logger.error("Unexpected API response format")
+            raise
+
+    def _zenodo_operation(self, method: str, url: str, **kwargs) -> requests.Response:
+        """Perform Zenodo API operation with retries"""
         headers = kwargs.pop("headers", {"Content-Type": "application/json"})
-        params = {"access_token": self.zenodo_token}
 
-        for attempt in range(3):
+        for attempt in range(CONFIG["MAX_RETRIES"]):
             try:
                 response = requests.request(
-                    method, url, headers=headers, params=params, **kwargs
+                    method,
+                    url,
+                    params={"access_token": self.zenodo_token},
+                    headers=headers,
+                    **kwargs
                 )
                 response.raise_for_status()
                 return response
             except requests.RequestException as e:
-                if attempt < 2:
-                    logger.warning(f"Retrying {method} {endpoint} (attempt {attempt + 1})")
-                    time.sleep(5)
+                if attempt < CONFIG["MAX_RETRIES"] - 1:
+                    logger.warning(f"Retrying {method} {url} (attempt {attempt + 1})")
+                    time.sleep(CONFIG["RETRY_DELAY"])
                 else:
+                    logger.error(f"Zenodo operation failed: {str(e)}")
                     raise
 
-    def _update_metadata(self, deposition_id):
-        """Update Zenodo metadata from CITATION.cff"""
-        metadata = {
-            "metadata": {
-                "title": self.metadata.get("title", f"Holidays v{self.version}"),
-                "upload_type": "software",
-                "description": self.metadata.get("abstract", ""),
-                "creators": [
-                    {"name": f"{author['family-names']}, {author['given-names']}"}
-                    for author in self.metadata.get("authors", [])
-                ],
-                "keywords": self.metadata.get("keywords", []),
-                "license": {"id": self.metadata.get("license", "mit")},
-                "version": f"v{self.version}",
-                "publication_date": self.metadata.get("date-released", ""),
-                "custom": {
-                    "code:codeRepository": self.metadata.get(
-                        "repository-code",
-                        f"https://github.com/{os.getenv('GITHUB_REPOSITORY', 'vacanza/holidays')}"
-                    )
-                }
-            }
-        }
-        self._zenodo_request("PUT", f"/{deposition_id}", json=metadata)
+    def download_artifact(self, artifact_name: str) -> str:
+        """Download release artifact from public repository"""
+        try:
+            url = urljoin(
+                f"{CONFIG['BASE_DOWNLOAD_URL']}/v{self.version}/",
+                artifact_name
+            )
 
-    def _handle_artifacts(self, deposition_id):
-        """Process file uploads from environment variable"""
-        # Clear existing files
-        for file in self._zenodo_request("GET", f"/{deposition_id}/files").json():
-            self._zenodo_request("DELETE", f"/{deposition_id}/files/{file['id']}")
+            logger.info(f"Downloading {artifact_name}")
+            response = self.session.get(url, stream=True, timeout=30)
+            response.raise_for_status()
 
-        # Upload new files
-        for artifact in self.filenames:
-            artifact_name = os.path.basename(artifact)
-            download_url = urljoin(f"{self.base_url}/v{self.version}/", artifact_name)
+            local_path = f"holidays-{self.version}{os.path.splitext(artifact_name)[1]}"
 
-            with self.session.get(download_url, stream=True) as response:
-                response.raise_for_status()
-                self._zenodo_request(
-                    "POST", f"/{deposition_id}/files",
-                    files={"file": (artifact_name, response.content)}
-                )
-                logger.info(f"Uploaded {artifact_name}")
+            with open(local_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:  # Filter out keep-alive chunks
+                        f.write(chunk)
 
-    def publish(self):
-        """Main publication workflow"""
+            logger.info(f"Successfully downloaded {local_path}")
+            return local_path
+
+        except requests.RequestException as e:
+            logger.error(f"Download failed: {str(e)}")
+            raise
+
+    def update_zenodo(self) -> None:
+        """Update Zenodo deposition with new version"""
         if not self.zenodo_token:
-            logger.warning("Skipping Zenodo upload - no token provided")
+            logger.warning("Zenodo token not found, skipping Zenodo update")
             return
 
         try:
-            # Create new deposition
-            response = self._zenodo_request("POST", "")
-            deposition_id = response.json()["id"]
+            # Get existing depositions
+            response = self._zenodo_operation("GET", CONFIG["ZENODO_API"])
+            depositions = response.json()
 
-            self._update_metadata(deposition_id)
-            self._handle_artifacts(deposition_id)
+            # Find matching concept ID using Zenodo's version format
+            concept_id = next(
+                (dep["conceptrecid"] for dep in depositions
+                 if dep.get("metadata", {}).get("version") == self.zenodo_version),
+                None
+            )
 
-            # Final publish
-            self._zenodo_request("POST", f"/{deposition_id}/actions/publish")
-            logger.info("Successfully published to Zenodo")
+            if concept_id:
+                logger.info(f"Updating existing Zenodo record {concept_id}")
+                response = self._zenodo_operation(
+                    "POST",
+                    f"{CONFIG['ZENODO_API']}/{concept_id}/actions/newversion"
+                )
+                deposition_id = response.json()["id"]
+            else:
+                logger.info("Creating new Zenodo record")
+                response = self._zenodo_operation(
+                    "POST", CONFIG["ZENODO_API"],
+                    json={
+                        "metadata": {
+                            "title": f"Holidays {self.zenodo_version}",
+                            "version": self.zenodo_version,
+                            "upload_type": "software",
+                            "description": "Country-specific holiday management library",
+                            "creators": [{
+                                "name": "Vacanza Team",
+                                "affiliation": "Open Source Community"
+                            }],
+                            "license": "mit"
+                        }
+                    }
+                )
+                deposition_id = response.json()["id"]
+
+            # Upload artifacts with correct filenames
+            artifacts = [
+                f"holidays-{self.version}-sbom.json",
+                f"holidays-{self.version}.tar.gz",
+                f"holidays-{self.version}-py3-none-any.whl"
+            ]
+
+            for artifact in artifacts:
+                local_path = self.download_artifact(artifact)
+                try:
+                    with open(local_path, "rb") as f:
+                        # Zenodo requires multipart/form-data with explicit filename
+                        self._zenodo_operation(
+                            "POST",
+                            f"{CONFIG['ZENODO_API']}/{deposition_id}/files",
+                            headers={},  # Let requests set Content-Type
+                            data={"name": os.path.basename(local_path)},
+                            files={"file": (os.path.basename(local_path), f)}
+                        )
+                finally:
+                    os.remove(local_path)  # Cleanup
+
+            # Publish deposition
+            self._zenodo_operation(
+                "POST",
+                f"{CONFIG['ZENODO_API']}/{deposition_id}/actions/publish"
+            )
+            logger.info("Zenodo update completed successfully")
 
         except Exception as e:
-            logger.error(f"Publication failed: {str(e)}")
+            logger.error(f"Zenodo update failed: {str(e)}")
             raise
 
 
+def main() -> None:
+    """Main execution flow"""
+    try:
+        downloader = PublicReleaseDownloader()
+
+        # Download standard artifacts
+        artifacts = [
+            f"holidays-{downloader.version}-sbom.json",
+            f"holidays-{downloader.version}.tar.gz",
+            f"holidays-{downloader.version}-py3-none-any.whl"
+        ]
+
+        for artifact in artifacts:
+            downloader.download_artifact(artifact)
+
+        # Update Zenodo if token is available
+        downloader.update_zenodo()
+
+        logger.info("All operations completed successfully")
+
+    except Exception as e:
+        logger.error(f"Workflow failed: {str(e)}")
+        raise
+
+
 if __name__ == "__main__":
-    ZenodoPublisher().publish()
+    main()
