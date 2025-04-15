@@ -171,9 +171,9 @@ class PublicReleaseDownloader:
                     deposition_id = dep["id"]
                     break
 
-            if deposition_id:
-                logger.info(f"Deleting previous version {deposition_id}")
-                self._zenodo_operation("DELETE", f"{CONFIG['ZENODO_API']}/{deposition_id}")
+            # if deposition_id:
+            #     logger.info(f"Deleting previous version {deposition_id}")
+            #     self._zenodo_operation("DELETE", f"{CONFIG['ZENODO_API']}/{deposition_id}")
 
             # Create new deposition with cff metadata
             logger.info("Creating new Zenodo record")
