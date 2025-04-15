@@ -16,6 +16,7 @@ import re
 import time
 from urllib.parse import urljoin
 import requests
+import yaml
 
 # Configure logging
 logging.basicConfig(
@@ -25,12 +26,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
+# Modified CONFIG section
 CONFIG = {
-    "REPO_OWNER": "vacanza",
-    "REPO_NAME": "holidays",
-    "GITHUB_API": "https://api.github.com/repos",
-    "BASE_DOWNLOAD_URL": "https://github.com/vacanza/holidays/releases/download",
-    "ZENODO_API": "https://zenodo.org/api/deposit/depositions",
+    "GITHUB_API": os.getenv("GITHUB_API", "https://api.github.com/repos"),
+    "BASE_DOWNLOAD_URL": os.getenv(
+        "VACANZA_GITHUB_BASE_URL",
+        "https://github.com/vacanza/holidays/releases/download"
+    ),
+    "ZENODO_API": os.getenv("ZENODO_API", "https://zenodo.org/api/deposit/depositions"),
+    "REPO_OWNER": os.getenv("REPO_OWNER", "vacanza"),
+    "REPO_NAME": os.getenv("REPO_NAME", "holidays"),
     "MAX_RETRIES": 3,
     "RETRY_DELAY": 5
 }
@@ -113,6 +118,35 @@ class PublicReleaseDownloader:
             logger.error(f"Download failed: {str(e)}")
             raise
 
+    def _parse_citation(self) -> dict:
+        """Parse CITATION.cff file for metadata"""
+        try:
+            # Get the script's directory
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            cff_path = os.path.join(script_dir, "CITATION.cff")
+
+            logger.info(f"Looking for CITATION.cff at: {cff_path}")
+
+            if not os.path.exists(cff_path):
+                raise FileNotFoundError(f"CITATION.cff not found at {cff_path}")
+
+            with open(cff_path, "r") as f:
+                citation = yaml.safe_load(f)
+
+            logger.info(f"Successfully parsed CITATION.cff from {cff_path}")
+            return {
+                "title": citation.get("title", f"Holidays {self.zenodo_version}"),
+                "description": citation.get("abstract", "Country-specific holiday management library"),
+                "creators": [{"name": f"{a['given-names']} {a['family-names']}".strip()}
+                             for a in citation.get("authors", [])],
+                "license": citation.get("license", "mit").lower(),
+                "keywords": citation.get("keywords", []),
+                "doi": citation.get("doi", "")
+            }
+        except Exception as e:
+            logger.error(f"Failed to process CITATION.cff: {str(e)}")
+            raise
+
     def update_zenodo(self) -> None:
         """Update Zenodo deposition with new version"""
         if not self.zenodo_token:
@@ -120,43 +154,43 @@ class PublicReleaseDownloader:
             return
 
         try:
-            # Get existing depositions
+            citation_meta = self._parse_citation()
             response = self._zenodo_operation("GET", CONFIG["ZENODO_API"])
             depositions = response.json()
 
-            # Find matching concept ID using Zenodo's version format
-            concept_id = next(
-                (dep["conceptrecid"] for dep in depositions
-                 if dep.get("metadata", {}).get("version") == self.zenodo_version),
-                None
-            )
+            # Find existing deposition by DOI or version
+            concept_id = None
+            deposition_id = None
+            for dep in depositions:
+                if dep.get("metadata", {}).get("doi") == citation_meta["doi"]:
+                    concept_id = dep["conceptrecid"]
+                    deposition_id = dep["id"]
+                    break
+                elif dep.get("metadata", {}).get("version") == self.zenodo_version:
+                    concept_id = dep["conceptrecid"]
+                    deposition_id = dep["id"]
+                    break
 
-            if concept_id:
-                logger.info(f"Updating existing Zenodo record {concept_id}")
-                response = self._zenodo_operation(
-                    "POST",
-                    f"{CONFIG['ZENODO_API']}/{concept_id}/actions/newversion"
-                )
-                deposition_id = response.json()["id"]
-            else:
-                logger.info("Creating new Zenodo record")
-                response = self._zenodo_operation(
-                    "POST", CONFIG["ZENODO_API"],
-                    json={
-                        "metadata": {
-                            "title": f"Holidays {self.zenodo_version}",
-                            "version": self.zenodo_version,
-                            "upload_type": "software",
-                            "description": "Country-specific holiday management library",
-                            "creators": [{
-                                "name": "Vacanza Team",
-                                "affiliation": "Open Source Community"
-                            }],
-                            "license": "mit"
-                        }
-                    }
-                )
-                deposition_id = response.json()["id"]
+            # Create new deposition with cff metadata
+            logger.info("Creating new Zenodo record")
+            deposition_data = {
+                "metadata": {
+                    "title": citation_meta["title"],
+                    "version": self.zenodo_version,
+                    "upload_type": "software",
+                    "description": citation_meta["description"],
+                    "creators": citation_meta["creators"],
+                    "license": citation_meta["license"],
+                    "keywords": citation_meta["keywords"],
+                    "doi": citation_meta["doi"]
+                }
+            }
+
+            response = self._zenodo_operation(
+                "POST", CONFIG["ZENODO_API"],
+                json=deposition_data
+            )
+            deposition_id = response.json()["id"]
 
             # Upload artifacts with correct filenames
             artifacts = [
@@ -195,6 +229,13 @@ class PublicReleaseDownloader:
 def main() -> None:
     """Main execution flow"""
     try:
+        # Verify CITATION.cff exists in the script's directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        cff_path = os.path.join(script_dir, "CITATION.cff")
+
+        if not os.path.exists(cff_path):
+            raise FileNotFoundError(f"Required CITATION.cff not found at {cff_path}")
+
         downloader = PublicReleaseDownloader()
 
         # Download standard artifacts
