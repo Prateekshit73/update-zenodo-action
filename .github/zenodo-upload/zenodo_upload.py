@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 # Configuration
 CONFIG = {
     "GITHUB_API": os.getenv("GITHUB_API", "https://api.github.com/repos"),
-    "BASE_DOWNLOAD_URL": os.getenv("BASE_DOWNLOAD_URL", "https://github.com"),
+    "BASE_DOWNLOAD_URL": os.getenv("VACANZA_GITHUB_BASE_URL", "https://github.com"),
     "ZENODO_API": os.getenv("ZENODO_API", "https://zenodo.org/api/deposit/depositions"),
-    "REPO_OWNER": os.getenv("GITHUB_REPO_OWNER"),
-    "REPO_NAME": os.getenv("GITHUB_REPO_NAME"),
+    "REPO_OWNER": os.getenv("REPO_OWNER"),
+    "REPO_NAME": os.getenv("REPO_NAME"),
     "MAX_RETRIES": 3,
     "RETRY_DELAY": 5,
-    "CITATION_PATH": os.getenv("CITATION_PATH", "../../CITATION.cff"),
+    "CITATION_PATH": os.getenv("CITATION_PATH", "CITATION.cff"),
 }
 
 class PublicReleaseDownloader:

@@ -42,9 +42,9 @@ jobs:
         uses: ./.github/zenodo-upload
         with:
           token: '${{ secrets.ZENODO_TOKEN }}'
-          repo-owner: '${{ github.repository_owner }}'
-          repo-name: '${{ github.event.repository.name }}'
-          base-download-url: 'https://github.com'
+          repo-owner: '${{ github.REPO_OWNER }}'
+          repo-name: '${{ github.REPO_NAME }}'
+          base-download-url: '${{ github.VACANZA_GITHUB_BASE_URL }}'
           citation-path: 'CITATION.cff'
           artifacts: 'source-code.zip,your-artifact-name.tar.gz,another-artifact.whl'
           sandbox: 'true'
