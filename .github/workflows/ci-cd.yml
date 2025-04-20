@@ -45,7 +45,7 @@ jobs:
           repo-owner: 'your-repo-owner'
           repo-name: 'your-repo-name'
           base-download-url: 'https://github.com'
-          citation-path: 'CITATION.cff'
+          citation-path: 'path/to/CITATION.cff'
           sandbox: 'true'
     permissions:
       contents: write
