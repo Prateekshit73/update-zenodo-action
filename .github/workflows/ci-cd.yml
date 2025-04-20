@@ -42,7 +42,10 @@ jobs:
         uses: ./.github/zenodo-upload
         with:
           token: '${{ secrets.ZENODO_TOKEN }}'
-          files: '${{ env.FILES }}'
+          repo-owner: 'your-repo-owner'
+          repo-name: 'your-repo-name'
+          base-download-url: 'https://github.com'
+          citation-path: 'path/to/CITATION.cff'
           sandbox: 'true'
     permissions:
       contents: write

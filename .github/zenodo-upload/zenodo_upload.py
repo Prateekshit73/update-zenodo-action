@@ -1,15 +1,3 @@
-#  holidays
-#  --------
-#  A fast, efficient Python library for generating country, province and state
-#  specific sets of holidays on the fly. It aims to make determining whether a
-#  specific date is a holiday as fast and flexible as possible.
-#
-#  Authors: Vacanza Team and individual contributors (see AUTHORS file)
-#           dr-prodigy <dr.prodigy.github@gmail.com> (c) 2017-2023
-#           ryanss <ryanssdev@icloud.com> (c) 2014-2017
-#  Website: https://github.com/vacanza/holidays
-#  License: MIT (see LICENSE file)
-
 import logging
 import os
 import re
@@ -26,20 +14,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-# Modified CONFIG section
 CONFIG = {
     "GITHUB_API": os.getenv("GITHUB_API", "https://api.github.com/repos"),
-    "BASE_DOWNLOAD_URL": os.getenv(
-        "VACANZA_GITHUB_BASE_URL",
-        "https://github.com/vacanza/holidays/releases/download"
-    ),
+    "BASE_DOWNLOAD_URL": os.getenv("BASE_DOWNLOAD_URL"),
     "ZENODO_API": os.getenv("ZENODO_API", "https://zenodo.org/api/deposit/depositions"),
-    "REPO_OWNER": os.getenv("REPO_OWNER", "vacanza"),
-    "REPO_NAME": os.getenv("REPO_NAME", "holidays"),
+    "REPO_OWNER": os.getenv("GITHUB_REPO_OWNER"),
+    "REPO_NAME": os.getenv("GITHUB_REPO_NAME"),
     "MAX_RETRIES": 3,
-    "RETRY_DELAY": 5
+    "RETRY_DELAY": 5,
+    "CITATION_PATH": os.getenv("CITATION_PATH", "CITATION.cff")
 }
-
 
 class PublicReleaseDownloader:
     """Manage public GitHub releases and Zenodo depositions"""
@@ -96,7 +80,7 @@ class PublicReleaseDownloader:
         """Download release artifact from public repository"""
         try:
             url = urljoin(
-                f"{CONFIG['BASE_DOWNLOAD_URL']}/v{self.version}/",
+                f"{CONFIG['BASE_DOWNLOAD_URL']}/{CONFIG['REPO_OWNER']}/{CONFIG['REPO_NAME']}/releases/download/v{self.version}/",
                 artifact_name
             )
 
@@ -104,8 +88,7 @@ class PublicReleaseDownloader:
             response = self.session.get(url, stream=True, timeout=30)
             response.raise_for_status()
 
-            local_path = f"holidays-{self.version}{os.path.splitext(artifact_name)[1]}"
-
+            local_path = f"{artifact_name}"
             with open(local_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:  # Filter out keep-alive chunks
@@ -121,9 +104,7 @@ class PublicReleaseDownloader:
     def _parse_citation(self) -> dict:
         """Parse CITATION.cff file for metadata"""
         try:
-            # Get the script's directory
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            cff_path = os.path.join(script_dir, "CITATION.cff")
+            cff_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG["CITATION_PATH"])
 
             logger.info(f"Looking for CITATION.cff at: {cff_path}")
 
@@ -135,14 +116,15 @@ class PublicReleaseDownloader:
 
             logger.info(f"Successfully parsed CITATION.cff from {cff_path}")
             return {
-                "title": citation.get("title", f"Holidays {self.zenodo_version}"),
-                "description": citation.get("abstract", "Country-specific holiday management library"),
-                "creators": [{"name": f"{a['given-names']} {a['family-names']}".strip()}
-                             for a in citation.get("authors", [])],
-                "license": citation.get("license", "mit").lower(),
-                "keywords": citation.get("keywords", []),
-                "doi": citation.get("doi", "")
+                "title": citation.get("title", f"{citation.get('title', 'Unknown')}")
+                , "description": citation.get("abstract", "Software repository")
+                , "creators": [{"name": f"{a['given-names']} {a['family-names']}".strip()}
+                             for a in citation.get("authors", [])]
+                , "license": citation.get("license", "mit").lower()
+                , "keywords": citation.get("keywords", [])
+                , "doi": citation.get("doi", "")
             }
+
         except Exception as e:
             logger.error(f"Failed to process CITATION.cff: {str(e)}")
             raise
@@ -171,10 +153,6 @@ class PublicReleaseDownloader:
                     deposition_id = dep["id"]
                     break
 
-            # if deposition_id:
-            #     logger.info(f"Deleting previous version {deposition_id}")
-            #     self._zenodo_operation("DELETE", f"{CONFIG['ZENODO_API']}/{deposition_id}")
-
             # Create new deposition with cff metadata
             logger.info("Creating new Zenodo record")
             deposition_data = {
@@ -198,9 +176,9 @@ class PublicReleaseDownloader:
 
             # Upload artifacts with correct filenames
             artifacts = [
-                f"holidays-{self.version}-sbom.json",
-                f"holidays-{self.version}.tar.gz",
-                f"holidays-{self.version}-py3-none-any.whl"
+                f"v{self.version}/source-code.zip",
+                f"v{self.version}/your-artifact-name.tar.gz",
+                f"v{self.version}/another-artifact.whl"
             ]
 
             for artifact in artifacts:
@@ -235,7 +213,7 @@ def main() -> None:
     try:
         # Verify CITATION.cff exists in the script's directory
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        cff_path = os.path.join(script_dir, "CITATION.cff")
+        cff_path = os.path.join(script_dir, CONFIG["CITATION_PATH"])
 
         if not os.path.exists(cff_path):
             raise FileNotFoundError(f"Required CITATION.cff not found at {cff_path}")
@@ -244,9 +222,9 @@ def main() -> None:
 
         # Download standard artifacts
         artifacts = [
-            f"holidays-{downloader.version}-sbom.json",
-            f"holidays-{downloader.version}.tar.gz",
-            f"holidays-{downloader.version}-py3-none-any.whl"
+            f"v{downloader.version}/source-code.zip",
+            f"v{downloader.version}/your-artifact-name.tar.gz",
+            f"v{downloader.version}/another-artifact.whl"
         ]
 
         for artifact in artifacts:
