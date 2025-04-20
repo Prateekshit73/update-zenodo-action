@@ -7,21 +7,6 @@ inputs:
   sandbox:
     description: 'Use Zenodo sandbox (true/false)'
     default: 'true'
-  repo-owner:
-    description: 'GitHub repository owner'
-    required: true
-  repo-name:
-    description: 'GitHub repository name'
-    required: true
-  base-download-url:
-    description: 'Base URL for downloading artifacts'
-    default: 'https://github.com'
-  citation-path:
-    description: 'Path to CITATION.cff file'
-    default: 'CITATION.cff'
-  artifacts:
-    description: 'Comma-separated list of artifacts to upload'
-    required: true
 runs:
   using: 'composite'
   steps:
@@ -30,3 +15,6 @@ runs:
     - id: upload
       run: python ${{ github.action_path }}/zenodo_upload.py
       shell: bash
+      env:
+        ZENODO_TOKEN: ${{ inputs.token }}
+        ZENODO_SANDBOX: ${{ inputs.sandbox }}
