@@ -19,6 +19,9 @@ inputs:
   citation-path:
     description: 'Path to CITATION.cff file'
     default: 'CITATION.cff'
+  artifacts:
+    description: 'Comma-separated list of artifacts to upload'
+    required: true
 runs:
   using: 'composite'
   steps:
@@ -34,3 +37,4 @@ runs:
         GITHUB_REPO_NAME: ${{ inputs.repo-name }}
         BASE_DOWNLOAD_URL: ${{ inputs.base-download-url }}
         CITATION_PATH: ${{ inputs.citation-path }}
+        ARTIFACTS: ${{ inputs.artifacts }}

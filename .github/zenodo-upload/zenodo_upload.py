@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 # Configuration
 CONFIG = {
     "GITHUB_API": os.getenv("GITHUB_API", "https://api.github.com/repos"),
-    "BASE_DOWNLOAD_URL": os.getenv("BASE_DOWNLOAD_URL"),
+    "BASE_DOWNLOAD_URL": os.getenv("BASE_DOWNLOAD_URL", "https://github.com"),
     "ZENODO_API": os.getenv("ZENODO_API", "https://zenodo.org/api/deposit/depositions"),
     "REPO_OWNER": os.getenv("GITHUB_REPO_OWNER"),
     "REPO_NAME": os.getenv("GITHUB_REPO_NAME"),
     "MAX_RETRIES": 3,
     "RETRY_DELAY": 5,
-    "CITATION_PATH": os.getenv("CITATION_PATH", "CITATION.cff")
+    "CITATION_PATH": os.getenv("CITATION_PATH", "../../CITATION.cff"),
 }
 
 class PublicReleaseDownloader:
@@ -175,11 +175,9 @@ class PublicReleaseDownloader:
             deposition_id = response.json()["id"]
 
             # Upload artifacts with correct filenames
-            artifacts = [
-                f"v{self.version}/source-code.zip",
-                f"v{self.version}/your-artifact-name.tar.gz",
-                f"v{self.version}/another-artifact.whl"
-            ]
+            artifacts = os.getenv("ARTIFACTS", "").split(",")
+            if not artifacts:
+                raise ValueError("No artifacts specified for upload")
 
             for artifact in artifacts:
                 local_path = self.download_artifact(artifact)
@@ -220,12 +218,10 @@ def main() -> None:
 
         downloader = PublicReleaseDownloader()
 
-        # Download standard artifacts
-        artifacts = [
-            f"v{downloader.version}/source-code.zip",
-            f"v{downloader.version}/your-artifact-name.tar.gz",
-            f"v{downloader.version}/another-artifact.whl"
-        ]
+        # Get artifacts from environment variable
+        artifacts = os.getenv("ARTIFACTS", "").split(",")
+        if not artifacts:
+            raise ValueError("No artifacts specified for upload")
 
         for artifact in artifacts:
             downloader.download_artifact(artifact)
