@@ -30,11 +30,3 @@ runs:
     - id: upload
       run: python ${{ github.action_path }}/zenodo_upload.py
       shell: bash
-      env:
-        ZENODO_TOKEN: ${{ inputs.token }}
-        ZENODO_SANDBOX: ${{ inputs.sandbox }}
-        GITHUB_REPO_OWNER: ${{ inputs.repo-owner }}
-        GITHUB_REPO_NAME: ${{ inputs.repo-name }}
-        BASE_DOWNLOAD_URL: ${{ inputs.base-download-url }}
-        CITATION_PATH: ${{ inputs.citation-path }}
-        ARTIFACTS: ${{ inputs.artifacts }}
