@@ -71,7 +71,10 @@ class ZenodoUploader:
     def _parse_citation(self) -> dict:
         """Parse CITATION.cff file for metadata"""
         try:
-            cff_path = "CITATION.cff"  # Assuming CITATION.cff is in the current directory
+            # Get repository root directory
+            repo_root = os.getcwd()
+            cff_path = os.path.join(repo_root, "CITATION.cff")
+
             logger.info(f"Looking for CITATION.cff at: {cff_path}")
 
             if not os.path.exists(cff_path):

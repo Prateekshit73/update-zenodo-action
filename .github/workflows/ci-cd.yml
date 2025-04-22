@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          path: .
 
       - name: Set up Python
         uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55
@@ -107,6 +110,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          path: .
 
       - name: Download signed artifacts
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
@@ -119,6 +125,15 @@ jobs:
           mv dist/*.tar.gz dist/*.whl .
           files=$(echo *.tar.gz *.whl)
           echo "FILE_LIST=$files" >> $GITHUB_ENV
+
+      - name: Verify CITATION.cff exists
+        run: |
+          ls -la
+          if [ ! -f "CITATION.cff" ]; then
+            echo "CITATION.cff not found!"
+            exit 1
+          fi
+
       - name: Upload to Zenodo
         id: upload
         uses: ./.github/zenodo-upload
