@@ -37,6 +37,8 @@ class ZenodoUploader:
 
     def __init__(self):
         self.zenodo_token = os.getenv("ZENODO_TOKEN")
+        self.sandbox = os.getenv("ZENODO_SANDBOX", "false").lower() == "true"
+        self.base_url = "https://sandbox.zenodo.org" if self.sandbox else "https://zenodo.org"
         self.version = self._get_latest_version()
         self.zenodo_version = f"v{self.version}"  # Maintain 'v' prefix for Zenodo
 
@@ -47,6 +49,7 @@ class ZenodoUploader:
 
     def _zenodo_operation(self, method: str, url: str, **kwargs) -> requests.Response:
         """Perform Zenodo API operation with retries"""
+        url = f"{self.base_url}/api/deposit/depositions{endpoint}"
         headers = kwargs.pop("headers", {"Content-Type": "application/json"})
 
         for attempt in range(CONFIG["MAX_RETRIES"]):
@@ -61,6 +64,7 @@ class ZenodoUploader:
                 response.raise_for_status()
                 return response
             except requests.RequestException as e:
+                logger.error(f"Response content: {response.text}")
                 if attempt < CONFIG["MAX_RETRIES"] - 1:
                     logger.warning(f"Retrying {method} {url} (attempt {attempt + 1})")
                     time.sleep(CONFIG["RETRY_DELAY"])
@@ -84,6 +88,15 @@ class ZenodoUploader:
                 citation = yaml.safe_load(f)
 
             logger.info(f"Successfully parsed CITATION.cff from {cff_path}")
+
+            # Validate required fields
+            if not citation.get("title"):
+                raise ValueError("Missing 'title' in CITATION.cff")
+            if not citation.get("authors"):
+                raise ValueError("Missing 'authors' in CITATION.cff")
+            if not citation.get("license"):
+                raise ValueError("Missing 'license' in CITATION.cff")
+
             return {
                 "title": citation.get("title", f"Holidays {self.zenodo_version}"),
                 "description": citation.get("abstract", "Country-specific holiday management library"),
@@ -91,6 +104,8 @@ class ZenodoUploader:
                              for a in citation.get("authors", [])],
                 "license": citation.get("license", "mit").lower(),
                 "keywords": citation.get("keywords", []),
+                "upload_type": "software",
+                "version": self.zenodo_version,
                 "doi": citation.get("doi", "")
             }
         except Exception as e:
@@ -164,6 +179,14 @@ class ZenodoUploader:
                 f"{CONFIG['ZENODO_API']}/{deposition_id}/actions/publish"
             )
             logger.info("Zenodo update completed successfully")
+
+            # Check if deposition is a draft before publishing
+            deposition = self._zenodo_operation("GET", f"/{deposition_id}").json()
+            if deposition["state"] == "done":
+                logger.error("Deposition is already published")
+                return
+            # Publish only if in draft state
+            self._zenodo_operation("POST", f"/{deposition_id}/actions/publish")
 
         except Exception as e:
             logger.error(f"Zenodo update failed: {str(e)}")
