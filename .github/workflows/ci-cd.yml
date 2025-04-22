@@ -124,7 +124,7 @@ jobs:
         uses: ./.github/zenodo-upload
         with:
           token: '${{ secrets.ZENODO_TOKEN }}'
-          files: '${{ env.FILES }}'
+          files: '${{ env.FILE_LIST }}'
           sandbox: 'true'
     permissions:
       contents: write

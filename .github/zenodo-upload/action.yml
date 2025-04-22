@@ -34,7 +34,6 @@ runs:
         python -m pip install --upgrade pip
         python -m pip install -r ${{ github.action_path }}/requirements.txt
         python -m pip install -e ${{ github.action_path }}
-        python -m pip install .
       shell: bash
 
     - id: upload

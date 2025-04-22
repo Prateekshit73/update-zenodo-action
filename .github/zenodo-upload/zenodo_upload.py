@@ -172,11 +172,22 @@ def main() -> None:
     try:
         uploader = ZenodoUploader()
 
-        # Assuming files are passed as environment variable or directly
-        files = os.getenv("FILES", "").split()  # Space-separated list of files
+        files = os.getenv("FILES", "").split()
+        # Add debug logging
+        logger.debug(f"Raw FILES env var: {os.getenv('FILES')}")
+        logger.debug(f"Processed files list: {files}")
+        logger.debug(f"Current directory: {os.getcwd()}")
+        logger.debug(f"Directory contents: {os.listdir()}")
+
         if not files:
             logger.error("No files provided for upload.")
             return
+
+        # Verify files exist
+        missing_files = [f for f in files if not os.path.exists(f)]
+        if missing_files:
+            logger.error(f"Missing files: {missing_files}")
+            raise FileNotFoundError(f"Could not find {len(missing_files)} files")
 
         uploader.update_zenodo(files)
 
