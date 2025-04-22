@@ -31,6 +31,7 @@ CONFIG = {
     "RETRY_DELAY": 5
 }
 
+
 class ZenodoUploader:
     """Manage Zenodo depositions"""
 

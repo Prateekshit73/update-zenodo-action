@@ -10,7 +10,20 @@
 #  Website: https://github.com/vacanza/holidays
 #  License: MIT (see LICENSE file)
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 if __name__ == "__main__":
-    setup()
+    setup(
+        name="zenodo-upload",
+        version="0.1.0",
+        packages=find_packages(),
+        install_requires=[
+            "requests",  # Add any other dependencies your script needs
+            "PyYAML",
+        ],
+        entry_points={
+            "console_scripts": [
+                "zenodo-upload=zenodo_upload:main",  # Ensure your zenodo_upload.py has a main function
+            ],
+        },
+    )
