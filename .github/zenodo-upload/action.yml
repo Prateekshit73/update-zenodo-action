@@ -4,17 +4,42 @@ inputs:
   token:
     description: 'Zenodo API token'
     required: true
+  concept:
+    description: 'Concept ID to create new version'
+    required: false
+  filenames:
+    description: 'Files to upload'
+    required: false
+  metadata:
+    description: 'Metadata filename'
+    required: false
   sandbox:
     description: 'Use Zenodo sandbox (true/false)'
     default: 'true'
+  publish:
+    description: 'Publish version'
+    required: false
+    default: 'false'
+
 runs:
   using: 'composite'
   steps:
-    - run: pip install -r ${{ github.action_path }}/requirements.txt
+    - name: Install Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install Dependencies
+      run: pip install -r ${{ github.action_path }}/requirements.txt
       shell: bash
+
     - id: upload
       run: python ${{ github.action_path }}/zenodo_upload.py
       shell: bash
       env:
         ZENODO_TOKEN: ${{ inputs.token }}
+        CONCEPT: ${{ inputs.concept }}
+        FILENAMES: ${{ inputs.filenames }}
+        METADATA: ${{ inputs.metadata }}
         ZENODO_SANDBOX: ${{ inputs.sandbox }}
+        PUBLISH: ${{ inputs.publish }}
