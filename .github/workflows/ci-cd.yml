@@ -121,7 +121,7 @@ jobs:
           echo "FILE_LIST=$files" >> $GITHUB_ENV
       - name: Upload to Zenodo
         id: upload
-        uses: ./.github/zenodo-upload
+        uses: .github/zenodo-upload/zenodo_upload.py
         with:
           token: '${{ secrets.ZENODO_TOKEN }}'
           files: '${{ env.FILES }}'
