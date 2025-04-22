@@ -7,7 +7,7 @@ inputs:
   concept:
     description: 'Concept ID to create new version'
     required: false
-  filenames:
+  files:
     description: 'Files to upload'
     required: false
   metadata:
@@ -43,7 +43,7 @@ runs:
       env:
         ZENODO_TOKEN: ${{ inputs.token }}
         CONCEPT: ${{ inputs.concept }}
-        FILENAMES: ${{ inputs.filenames }}
+        FILES: ${{ inputs.files }}
         METADATA: ${{ inputs.metadata }}
         ZENODO_SANDBOX: ${{ inputs.sandbox }}
         PUBLISH: ${{ inputs.publish }}
