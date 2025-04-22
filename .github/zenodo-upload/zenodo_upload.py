@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 CONFIG = {
-    "ZENODO_API": os.getenv("ZENODO_API", "https://zenodo.org/api/deposit/depositions"),
     "MAX_RETRIES": 3,
     "RETRY_DELAY": 5
 }
@@ -47,7 +46,7 @@ class ZenodoUploader:
         # Assuming version is passed as an environment variable for CI/CD
         return os.getenv("VERSION", "0.0.0")
 
-    def _zenodo_operation(self, method: str, url: str, **kwargs) -> requests.Response:
+    def _zenodo_operation(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """Perform Zenodo API operation with retries"""
         url = f"{self.base_url}/api/deposit/depositions{endpoint}"
         headers = kwargs.pop("headers", {"Content-Type": "application/json"})
@@ -120,7 +119,7 @@ class ZenodoUploader:
 
         try:
             citation_meta = self._parse_citation()
-            response = self._zenodo_operation("GET", CONFIG["ZENODO_API"])
+            response = self._zenodo_operation("GET", "")
             depositions = response.json()
 
             # Find existing deposition by DOI or version
@@ -151,26 +150,21 @@ class ZenodoUploader:
                 }
             }
 
-            response = self._zenodo_operation(
-                "POST", CONFIG["ZENODO_API"],
-                json=deposition_data
-            )
+            logger.info("Creating new Zenodo record")
+            response = self._zenodo_operation("POST", "", json=deposition_data)
             deposition_id = response.json()["id"]
 
             # Upload artifacts with correct filenames
             for artifact in files:
-                local_path = artifact  # Assuming files are already available in the current directory
                 try:
-                    with open(local_path, "rb") as f:
+                    with open(artifact, "rb") as f:
                         self._zenodo_operation(
                             "POST",
-                            f"{CONFIG['ZENODO_API']}/{deposition_id}/files",
-                            headers={},  # Let requests set Content-Type
-                            data={"name": os.path.basename(local_path)},
-                            files={"file": (os.path.basename(local_path), f)}
+                            f"/{deposition_id}/files",
+                            files={"file": (os.path.basename(artifact), f)}
                         )
                 except Exception as e:
-                    logger.error(f"Failed to upload {local_path}: {str(e)}")
+                    logger.error(f"Failed to upload {artifact}: {str(e)}")
                     raise
 
             # Publish deposition
@@ -180,13 +174,13 @@ class ZenodoUploader:
             )
             logger.info("Zenodo update completed successfully")
 
-            # Check if deposition is a draft before publishing
+            # Check deposition state and publish
             deposition = self._zenodo_operation("GET", f"/{deposition_id}").json()
-            if deposition["state"] == "done":
+            if deposition["state"] != "done":
+                self._zenodo_operation("POST", f"/{deposition_id}/actions/publish")
+                logger.info("Zenodo update completed successfully")
+            else:
                 logger.error("Deposition is already published")
-                return
-            # Publish only if in draft state
-            self._zenodo_operation("POST", f"/{deposition_id}/actions/publish")
 
         except Exception as e:
             logger.error(f"Zenodo update failed: {str(e)}")
