@@ -40,6 +40,8 @@ package:
 pre-commit:
 	pre-commit run --all-files
 
+sbom:
+	@python -m cyclonedx_py requirements .github/zenodo-upload/requirements.txt
 test:
 	pytest --cov=. --cov-config=pyproject.toml --cov-report term --cov-report xml --durations 10 --durations-min=0.75 --dist loadscope --no-cov-on-fail --numprocesses auto
 
