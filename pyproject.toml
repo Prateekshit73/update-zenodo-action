@@ -23,6 +23,3 @@ dependencies = [
     "cyclonedx-bom",
     "polib",
 ]
-
-[project.scripts]
-zenodo-upload = "zenodo_upload:main"

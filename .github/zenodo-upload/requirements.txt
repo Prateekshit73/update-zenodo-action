@@ -4,3 +4,5 @@ PyYAML
 build==1.2.2.post1
 cyclonedx-bom==5.3.0
 polib==1.2.0
+
+python-dateutil==2.9.0.post0
