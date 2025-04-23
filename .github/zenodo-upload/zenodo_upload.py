@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 # Configuration
 CONFIG = {
     "MAX_RETRIES": 3,
-    "RETRY_DELAY": 5
+    "RETRY_DELAY": 5,
+    "ZENODO_API": "/api/deposit/depositions"
 }
 
 
@@ -150,6 +151,16 @@ class ZenodoUploader:
                 }
             }
 
+            if concept_id:
+                logger.info(f"Creating new version for concept {concept_id}")
+                response = self._zenodo_operation("POST", f"/{concept_id}/actions/newversion")
+                deposition_id = response.json()["links"]["latest_draft"].split("/")[-1]
+            else:
+                logger.info("Creating new Zenodo record")
+                response = self._zenodo_operation("POST", "", json=deposition_data)
+                deposition_id = response.json()["id"]
+                concept_id = response.json()["conceptrecid"]
+
             logger.info("Creating new Zenodo record")
             response = self._zenodo_operation("POST", "", json=deposition_data)
             deposition_id = response.json()["id"]
@@ -164,7 +175,7 @@ class ZenodoUploader:
                     # Upload with correct headers and in-memory content
                     self._zenodo_operation(
                         "POST",
-                        f"/{deposition_id}/files",
+                        f"/{deposition_id}/actions/publish",
                         files={"file": (filename, file_content)},
                         headers={}  # Override default Content-Type
                     )
@@ -176,14 +187,16 @@ class ZenodoUploader:
             # Publish deposition
             self._zenodo_operation(
                 "POST",
-                f"{CONFIG['ZENODO_API']}/{deposition_id}/actions/publish"
+                f"/{deposition_id}/actions/publish"
             )
             logger.info("Zenodo update completed successfully")
 
             # Check deposition state and publish
             deposition = self._zenodo_operation("GET", f"/{deposition_id}").json()
             if deposition["state"] != "done":
-                self._zenodo_operation("POST", f"/{deposition_id}/actions/publish")
+                self._zenodo_operation(
+                    "POST",
+                    f"/{deposition_id}/actions/publish")
                 logger.info("Zenodo update completed successfully")
             else:
                 logger.error("Deposition is already published")
