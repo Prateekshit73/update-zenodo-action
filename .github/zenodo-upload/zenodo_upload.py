@@ -157,12 +157,18 @@ class ZenodoUploader:
             # Upload artifacts with correct filenames
             for artifact in files:
                 try:
+                    # Read file content into memory
                     with open(artifact, "rb") as f:
-                        self._zenodo_operation(
-                            "POST",
-                            f"/{deposition_id}/files",
-                            files={"file": (os.path.basename(artifact), f)}
-                        )
+                        file_content = f.read()
+                    filename = os.path.basename(artifact)
+                    # Upload with correct headers and in-memory content
+                    self._zenodo_operation(
+                        "POST",
+                        f"/{deposition_id}/files",
+                        files={"file": (filename, file_content)},
+                        headers={}  # Override default Content-Type
+                    )
+
                 except Exception as e:
                     logger.error(f"Failed to upload {artifact}: {str(e)}")
                     raise
