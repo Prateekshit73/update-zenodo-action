@@ -135,9 +135,7 @@ class ZenodoUploader:
                     concept_id = dep["conceptrecid"]
                     deposition_id = dep["id"]
                     break
-
-            # Create new deposition with cff metadata
-            logger.info("Creating new Zenodo record")
+            # Prepare deposition data
             deposition_data = {
                 "metadata": {
                     "title": citation_meta["title"],
@@ -150,56 +148,46 @@ class ZenodoUploader:
                     "doi": citation_meta["doi"]
                 }
             }
-
+            # Handle version creation or new deposition
             if concept_id:
                 logger.info(f"Creating new version for concept {concept_id}")
-                response = self._zenodo_operation("POST", f"/{concept_id}/actions/newversion")
-                deposition_id = response.json()["links"]["latest_draft"].split("/")[-1]
+                try:
+                    response = self._zenodo_operation("POST", f"/{concept_id}/actions/newversion")
+                    deposition_id = response.json()["links"]["latest_draft"].split("/")[-1]
+                except requests.HTTPError as e:
+                    if e.response.status_code == 404:
+                        logger.warning("Concept not found, creating new deposition")
+                        response = self._zenodo_operation("POST", "", json=deposition_data)
+                        deposition_id = response.json()["id"]
+                        concept_id = response.json()["conceptrecid"]
+                    else:
+                        raise
             else:
                 logger.info("Creating new Zenodo record")
                 response = self._zenodo_operation("POST", "", json=deposition_data)
                 deposition_id = response.json()["id"]
                 concept_id = response.json()["conceptrecid"]
-
-            logger.info("Creating new Zenodo record")
-            response = self._zenodo_operation("POST", "", json=deposition_data)
-            deposition_id = response.json()["id"]
-
-            # Upload artifacts with correct filenames
+            # Upload files
             for artifact in files:
                 try:
-                    # Read file content into memory
                     with open(artifact, "rb") as f:
                         file_content = f.read()
                     filename = os.path.basename(artifact)
-                    # Upload with correct headers and in-memory content
                     self._zenodo_operation(
                         "POST",
-                        f"/{deposition_id}/actions/publish",
+                        f"/{deposition_id}/files",
                         files={"file": (filename, file_content)},
-                        headers={}  # Override default Content-Type
+                        headers={}
                     )
+                    logger.info(f"Uploaded {filename}")
 
                 except Exception as e:
                     logger.error(f"Failed to upload {artifact}: {str(e)}")
                     raise
 
             # Publish deposition
-            self._zenodo_operation(
-                "POST",
-                f"/{deposition_id}/actions/publish"
-            )
+            self._zenodo_operation("POST", f"/{deposition_id}/actions/publish")
             logger.info("Zenodo update completed successfully")
-
-            # Check deposition state and publish
-            deposition = self._zenodo_operation("GET", f"/{deposition_id}").json()
-            if deposition["state"] != "done":
-                self._zenodo_operation(
-                    "POST",
-                    f"/{deposition_id}/actions/publish")
-                logger.info("Zenodo update completed successfully")
-            else:
-                logger.error("Deposition is already published")
 
         except Exception as e:
             logger.error(f"Zenodo update failed: {str(e)}")
