@@ -158,7 +158,7 @@ class ZenodoAPI:
         logger.info("Updating metadata for deposition: %s", deposition_id)
 
         try:
-            metadata = self.matadata
+            metadata = self.metadata
             new_metadata = {}
 
             # (existing metadata processing code)
