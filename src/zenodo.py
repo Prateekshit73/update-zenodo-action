@@ -99,6 +99,7 @@ class ZenodoAPI:
             if existing:
                 concept_id, deposition_id = existing
                 logger.info("Found existing concept %s", concept_id)
+                logger.info("Found existing deposition %s", deposition_id)
 
                 try:
                     response = self._make_request("POST", f"/{deposition_id}/actions/newversion")
