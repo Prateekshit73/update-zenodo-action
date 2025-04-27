@@ -35,7 +35,6 @@ l10n:
 	scripts/l10n/generate_mo_files.py
 
 package:
-	scripts/l10n/generate_mo_files.py
 	python -m build
 
 pre-commit:
