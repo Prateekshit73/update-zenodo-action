@@ -31,39 +31,39 @@ doc:
 
 l10n:
 	find . -type f -name "*.pot" -delete
-	scripts/l10n/generate_po_files.py >/dev/null 2>&1
-	scripts/l10n/generate_mo_files.py
+	python -m scripts/l10n/generate_po_files.py >/dev/null 2>&1
+	python -m scripts/l10n/generate_mo_files.py
 
 package:
-	scripts/l10n/generate_mo_files.py
+	python -m scripts/l10n/generate_mo_files.py
 	python -m build
 
 pre-commit:
 	pre-commit run --all-files
 
 release-notes:
-	@scripts/generate_release_notes.py
+	@python -m scripts/generate_release_notes.py
 
 sbom:
-	@python -m cyclonedx_py requirements requirements/runtime.txt
+	@python -m cyclonedx_py requirements zenodo-upload/requirements.txt
 
 setup:
 	pip install --upgrade pip
-	pip install --requirement requirements/dev.txt
-	pip install --requirement requirements/docs.txt
-	pip install --requirement requirements/runtime.txt
-	pip install --requirement requirements/tests.txt
+	pip install --requirement zenodo-upload/requirements.txt
+	pip install --requirement zenodo-upload/requirements.txt
+	pip install --requirement zenodo-upload/requirements.txt
+	pip install --requirement zenodo-upload/requirements.txt
 	pre-commit install --hook-type pre-commit
 	pre-commit install --hook-type pre-push
 	make l10n
 	make package
 
 snapshot:
-	scripts/l10n/generate_mo_files.py
-	scripts/generate_snapshots.py
+	python -m scripts/l10n/generate_mo_files.py
+	python -m scripts/generate_snapshots.py
 
 test:
-	scripts/l10n/generate_mo_files.py
+	python -m scripts/l10n/generate_mo_files.py
 	pytest --cov=. --cov-config=pyproject.toml --cov-report term --cov-report xml --durations 10 --durations-min=0.75 --dist loadscope --no-cov-on-fail --numprocesses auto
 
 tox:
