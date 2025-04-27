@@ -139,5 +139,5 @@ jobs:
           token: ${{ secrets.ZENODO_TOKEN }}
           filenames: ${{ env.FILE_LIST }}
           metadata: CITATION.cff
-          sandbox: 'true'
+          sandbox: 'false'
           publish: 'true'
