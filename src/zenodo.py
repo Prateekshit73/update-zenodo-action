@@ -1,16 +1,14 @@
 import logging
 import os
-from typing import Any
-
+from typing import Any, Optional
 import requests
 import yaml
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
-# Initialize logger
+
 logger = logging.getLogger(__name__)
 ZENODO_URL = "https://zenodo.org"
 ZENODO_SANDBOX_URL = "https://sandbox.zenodo.org"
@@ -19,51 +17,34 @@ ZENODO_SANDBOX_URL = "https://sandbox.zenodo.org"
 class ZenodoAPI:
     """Client for interacting with the Zenodo API."""
 
-    def __init__(self, auth_token: str, sandbox: bool = False, metadata_file: str | None = None):
+    def __init__(self, auth_token: str, sandbox: bool = False, metadata_file: Optional[str] = None):
         self.base_url = f"{ZENODO_SANDBOX_URL if sandbox else ZENODO_URL}/api/deposit/depositions"
-        self.headers = {
-            "Authorization": f"Bearer {auth_token}",
-
-        }
-        self.matadata = {}  # Initialize metadata as empty dict
-
-        # NEW: Log initialization parameters (redacting auth token)
+        self.headers = {"Authorization": f"Bearer {auth_token}"}
+        self.metadata = {}
         logger.debug("Initializing ZenodoAPI with sandbox=%s", sandbox)
-        logger.debug("Base URL: %s", self.base_url)
 
         if metadata_file:
 
             try:
-                logger.info("Loading metadata from: %s", metadata_file)
-
                 with open(metadata_file, encoding="utf-8") as f:
-                    self.matadata = yaml.safe_load(f)
-                logger.debug("Loaded metadata: %s", self.matadata)
+                    self.metadata = yaml.safe_load(f)
+                logger.info("Loaded metadata from %s", metadata_file)
 
             except Exception as e:
-                logger.error("Failed to load metadata file: %s", str(e))
+                logger.error("Metadata load failed: %s", str(e))
                 raise
 
     def _make_request(
             self,
             method: str,
             endpoint: str,
-            json: dict | None = None,
-            files: dict | None = None,
+            json: Optional[dict] = None,
+            files: Optional[dict] = None
     ) -> Any:
 
         """Perform an HTTP request to the Zenodo API."""
         url = f"{self.base_url}{endpoint}"
-
-        # NEW: Log request details
-        logger.debug("Making %s request to: %s", method, url)
-        logger.debug("Headers: %s", {k: "***" if k == "Authorization" else v for k, v in self.headers.items()})
-
-        if json:
-            logger.debug("Request JSON: %s", json)
-
-        if files:
-            logger.debug("Files to upload: %s", list(files.keys()))
+        logger.debug("%s %s", method.upper(), url)
 
         try:
             response = requests.request(
@@ -72,68 +53,103 @@ class ZenodoAPI:
                 headers=self.headers,
                 json=json,
                 files=files,
+                timeout=30
             )
             response.raise_for_status()
-            # NEW: Log response details
-            logger.debug("Response status: %s", response.status_code)
-            logger.debug("Response content: %s", response.text[:200])  # Truncate long responses
-            return response.json() if response.content and method != "DELETE" else None
-
+            return response.json() if response.content else None
 
         except requests.HTTPError as e:
-            logger.error("HTTP error: %s", str(e))
-            logger.error("Response content: %s", e.response.text[:200])
+            logger.error("HTTP %d: %s", e.response.status_code, e.response.text)
             raise
 
         except Exception as e:
             logger.error("Request failed: %s", str(e))
             raise
 
-    def create_concept(self) -> str:
-        """Create a new concept."""
-        logger.info("Creating new concept")
+    def _find_existing_deposition(self) -> Optional[tuple[str, str]]:
+        """Find existing deposition by DOI or version."""
 
         try:
-            response = self._make_request("POST", "")
-            new_deposition_id = response["id"]
-            logger.info("Created new concept with ID: %s", new_deposition_id)
-            return new_deposition_id
+            depositions = self._make_request("GET", "")
+            target_doi = self.metadata.get("doi")
+            target_version = str(self.metadata.get("version", ""))
 
-        except KeyError as e:
-            logger.error("Missing expected field in response: %s", str(e))
-            raise
+            for dep in depositions:
+                meta = dep.get("metadata", {})
+
+                if meta.get("doi") == target_doi:
+                    return dep["conceptrecid"], dep["id"]
+
+                if str(meta.get("version")) == target_version:
+                    return dep["conceptrecid"], dep["id"]
+
+            return None
 
         except Exception as e:
-            logger.error("Failed to create concept: %s", str(e))
-            raise
+            logger.warning("Deposition search failed: %s", str(e))
+            return None
 
-    def create_version(self, concept_id: str | None = None) -> str:
-        """Create a new concept version."""
+    def create_version(self) -> str:
+        """Smart version creation with fallback to new deposition."""
 
         try:
-            concept_id = concept_id or self.matadata["conceptrecid"]
-            logger.debug("Derived concept ID: %s", concept_id)
-            logger.info("Creating new version for concept ID: %s", concept_id)
-            response = self._make_request("GET", f"?q=conceptrecid:{concept_id}")
-            logger.debug("Version creation response: %s", response)
+            # Try to find existing deposition
+            existing = self._find_existing_deposition()
 
-            if not response:  # NEW: Add validation
-                logger.error("No existing versions found for concept ID: %s", concept_id)
-                raise ValueError("No existing versions found")
+            if existing:
+                concept_id, deposition_id = existing
+                logger.info("Found existing concept %s", concept_id)
 
-            deposition_id = self.matadata["doi"].split(".")[-1]
-            logger.debug("Found existing deposition ID: %s", deposition_id)
-            response = self._make_request("POST", f"/{deposition_id}/actions/newversion")
-            new_deposition_id = response["id"]
-            logger.info("Created new version with ID: %s", new_deposition_id)
-            return new_deposition_id
+                try:
+                    response = self._make_request("POST", f"/{deposition_id}/actions/newversion")
+                    return response["id"]
 
-        except (KeyError, IndexError) as e:
-            logger.error("Invalid response structure: %s", str(e))
-            raise
+                except requests.HTTPError as e:
+                    if e.response.status_code == 404:
+                        logger.warning("Concept not found, creating new deposition")
+                        return self._create_new_deposition()
+                    raise
+
+            return self._create_new_deposition()
 
         except Exception as e:
             logger.error("Version creation failed: %s", str(e))
+            raise
+
+    def _create_new_deposition(self) -> str:
+        """Create brand new deposition with metadata."""
+
+        deposition_data = {
+            "metadata": {
+                "title": self.metadata["title"],
+                "upload_type": "software",
+                "description": self.metadata.get("abstract", ""),
+                "creators": [
+                    {"name": f"{a['family-names']}, {a['given-names']}"}
+                    for a in self.metadata.get("authors", [])
+                ],
+                "license": {"id": self.metadata.get("license", "")},
+                "keywords": self.metadata.get("keywords", []),
+                "version": self.metadata.get("version", "1.0.0")
+            }
+        }
+        response = self._make_request("POST", "", json=deposition_data)
+        logger.info("Created new deposition %s", response["id"])
+        return response["id"]
+
+    def full_upload_flow(self, file_paths: list[str]) -> str:
+        """Complete upload workflow with error recovery."""
+
+        try:
+            deposition_id = self.create_version()
+            self.delete_files(deposition_id)
+            self.upload_files(deposition_id, file_paths)
+            self.update_metadata(deposition_id)
+            self.publish_version(deposition_id)
+            return deposition_id
+
+        except Exception as e:
+            logger.error("Upload workflow failed: %s", str(e))
             raise
 
     def update_metadata(self, deposition_id: str) -> None:
