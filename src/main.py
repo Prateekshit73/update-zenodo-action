@@ -13,7 +13,7 @@ def main():
 
     api = ZenodoAPI(token, sandbox.lower() == "true", metadata_file)
 
-    new_ver_id = api.create_version(concept_id)
+    new_ver_id = api.create_version()
     api.update_metadata(new_ver_id)
     api.delete_files(new_ver_id)
     api.upload_files(new_ver_id, filenames.split(" "))
