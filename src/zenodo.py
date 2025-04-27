@@ -111,7 +111,8 @@ class ZenodoAPI:
         """Create a new concept version."""
 
         try:
-            concept_id = concept_id or self.matadata["doi"].split(".")[-1]
+            concept_id = concept_id or self.matadata["conceptrecid"]
+            logger.debug("Derived concept ID: %s", concept_id)
             logger.info("Creating new version for concept ID: %s", concept_id)
             response = self._make_request("GET", f"?q=conceptrecid:{concept_id}")
             logger.debug("Version creation response: %s", response)
@@ -120,7 +121,7 @@ class ZenodoAPI:
                 logger.error("No existing versions found for concept ID: %s", concept_id)
                 raise ValueError("No existing versions found")
 
-            deposition_id = response[0]["id"]
+            deposition_id = self.matadata["doi"].split(".")[-1]
             logger.debug("Found existing deposition ID: %s", deposition_id)
             response = self._make_request("POST", f"/{deposition_id}/actions/newversion")
             new_deposition_id = response["id"]

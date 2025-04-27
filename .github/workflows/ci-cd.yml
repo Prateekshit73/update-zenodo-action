@@ -134,7 +134,7 @@ jobs:
           echo "FILE_LIST=$files" >> $GITHUB_ENV
 
       - name: Upload to Zenodo
-        uses: KJhellico/update-zenodo-action@first-action
+        uses: .github/src
         with:
           token: ${{ secrets.ZENODO_TOKEN }}
           filenames: ${{ env.FILE_LIST }}
