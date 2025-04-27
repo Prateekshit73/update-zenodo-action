@@ -2,6 +2,7 @@
 name = "Zenodo Upload"
 description = "Uploads release to Zenodo"
 license = "MIT"
+version = "0.70"
 
 [tool.ruff]
 line-length = 99
