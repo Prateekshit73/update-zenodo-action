@@ -1,5 +1,5 @@
 [project]
-name = "Zenodo Upload"
+name = "zenodo-upload"
 description = "Uploads release to Zenodo"
 license = "MIT"
 version = "0.70"
