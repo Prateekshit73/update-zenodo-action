@@ -102,7 +102,7 @@ class ZenodoAPI:
                 logger.info("Found existing deposition %s", deposition_id)
 
                 try:
-                    response = self._make_request("POST", f"/{deposition_id}/actions/newversion")
+                    response = self._make_request("POST", f"/{concept_id}/actions/newversion")
                     return response["id"]
 
                 except requests.HTTPError as e:
