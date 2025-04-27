@@ -12,7 +12,6 @@
 
 import logging
 import os
-import re
 import time
 import requests
 import yaml
@@ -24,11 +23,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration
 CONFIG = {
     "MAX_RETRIES": 3,
-    "RETRY_DELAY": 5,
-    "ZENODO_API": "/api/deposit/depositions"
+    "RETRY_DELAY": 5
 }
 
 
@@ -39,13 +36,8 @@ class ZenodoUploader:
         self.zenodo_token = os.getenv("ZENODO_TOKEN")
         self.sandbox = os.getenv("ZENODO_SANDBOX", "false").lower() == "true"
         self.base_url = "https://sandbox.zenodo.org" if self.sandbox else "https://zenodo.org"
-        self.version = self._get_latest_version()
-        self.zenodo_version = f"v{self.version}"  # Maintain 'v' prefix for Zenodo
-
-    def _get_latest_version(self) -> str:
-        """Get the latest version from the environment variable or other source"""
-        # Assuming version is passed as an environment variable for CI/CD
-        return os.getenv("VERSION", "0.0.0")
+        self.citation = self._parse_citation()
+        self.version = self.citation["version"].lstrip('v')  # Remove 'v' prefix for Zenodo
 
     def _zenodo_operation(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """Perform Zenodo API operation with retries"""
@@ -75,37 +67,25 @@ class ZenodoUploader:
     def _parse_citation(self) -> dict:
         """Parse CITATION.cff file for metadata"""
         try:
-            # Get repository root directory
-            repo_root = os.getcwd()
-            cff_path = os.path.join(repo_root, "CITATION.cff")
 
-            logger.info(f"Looking for CITATION.cff at: {cff_path}")
-
-            if not os.path.exists(cff_path):
-                raise FileNotFoundError(f"CITATION.cff not found at {cff_path}")
-
-            with open(cff_path, "r") as f:
+            with open("CITATION.cff", "r") as f:
                 citation = yaml.safe_load(f)
 
-            logger.info(f"Successfully parsed CITATION.cff from {cff_path}")
+            logger.info(f"Successfully parsed CITATION.cff")
 
             # Validate required fields
-            if not citation.get("title"):
-                raise ValueError("Missing 'title' in CITATION.cff")
-            if not citation.get("authors"):
-                raise ValueError("Missing 'authors' in CITATION.cff")
-            if not citation.get("license"):
-                raise ValueError("Missing 'license' in CITATION.cff")
-
+            required_fields = ["title", "authors", "license", "version"]
+            for field in required_fields:
+                if field not in citation:
+                    raise ValueError(f"Missing required field '{field}' in CITATION.cff")
             return {
-                "title": citation.get("title", f"Holidays {self.zenodo_version}"),
-                "description": citation.get("abstract", "Country-specific holiday management library"),
+                "title": citation["title"],
+                "description": citation.get("abstract", ""),
                 "creators": [{"name": f"{a['given-names']} {a['family-names']}".strip()}
-                             for a in citation.get("authors", [])],
-                "license": citation.get("license", "mit").lower(),
+                             for a in citation["authors"]],
+                "license": citation["license"].lower(),
                 "keywords": citation.get("keywords", []),
-                "upload_type": "software",
-                "version": self.zenodo_version,
+                "version": citation["version"],
                 "doi": citation.get("doi", "")
             }
         except Exception as e:
@@ -119,7 +99,7 @@ class ZenodoUploader:
             return
 
         try:
-            citation_meta = self._parse_citation()
+
             response = self._zenodo_operation("GET", "")
             depositions = response.json()
 
@@ -127,25 +107,26 @@ class ZenodoUploader:
             concept_id = None
             deposition_id = None
             for dep in depositions:
-                if dep.get("metadata", {}).get("doi") == citation_meta["doi"]:
+                metadata = dep.get("metadata", {})
+                if metadata.get("doi") == self.citation["doi"]:
                     concept_id = dep["conceptrecid"]
                     deposition_id = dep["id"]
                     break
-                elif dep.get("metadata", {}).get("version") == self.zenodo_version:
+                elif metadata.get("version") == self.version:
                     concept_id = dep["conceptrecid"]
                     deposition_id = dep["id"]
                     break
             # Prepare deposition data
             deposition_data = {
                 "metadata": {
-                    "title": citation_meta["title"],
-                    "version": self.zenodo_version,
+                    "title": self.citation["title"],
+                    "version": self.version,
                     "upload_type": "software",
-                    "description": citation_meta["description"],
-                    "creators": citation_meta["creators"],
-                    "license": citation_meta["license"],
-                    "keywords": citation_meta["keywords"],
-                    "doi": citation_meta["doi"]
+                    "description": self.citation["description"],
+                    "creators": self.citation["creators"],
+                    "license": self.citation["license"],
+                    "keywords": self.citation["keywords"],
+                    "doi": self.citation["doi"]
                 }
             }
             # Handle version creation or new deposition
@@ -171,15 +152,13 @@ class ZenodoUploader:
             for artifact in files:
                 try:
                     with open(artifact, "rb") as f:
-                        file_content = f.read()
-                    filename = os.path.basename(artifact)
-                    self._zenodo_operation(
-                        "POST",
-                        f"/{deposition_id}/files",
-                        files={"file": (filename, file_content)},
-                        headers={}
-                    )
-                    logger.info(f"Uploaded {filename}")
+                        self._zenodo_operation(
+                            "POST",
+                            f"/{deposition_id}/files",
+                            files={"file": (os.path.basename(artifact), f)},
+                            headers={}
+                        )
+                    logger.info(f"Uploaded {artifact}")
 
                 except Exception as e:
                     logger.error(f"Failed to upload {artifact}: {str(e)}")
@@ -198,24 +177,11 @@ def main() -> None:
     """Main execution flow"""
     try:
         uploader = ZenodoUploader()
-
-        files = os.getenv("FILES", "").split()
-        # Add debug logging
-        logger.debug(f"Raw FILES env var: {os.getenv('FILES')}")
-        logger.debug(f"Processed files list: {files}")
-        logger.debug(f"Current directory: {os.getcwd()}")
-        logger.debug(f"Directory contents: {os.listdir()}")
-
+        files = [f for f in os.getenv("FILES", "").split() if os.path.exists(f)]
         if not files:
-            logger.error("No files provided for upload.")
+            logger.error("No valid files provided for upload.")
             return
-
-        # Verify files exist
-        missing_files = [f for f in files if not os.path.exists(f)]
-        if missing_files:
-            logger.error(f"Missing files: {missing_files}")
-            raise FileNotFoundError(f"Could not find {len(missing_files)} files")
-
+        logger.debug(f"Processing files: {files}")
         uploader.update_zenodo(files)
 
         logger.info("All operations completed successfully")
