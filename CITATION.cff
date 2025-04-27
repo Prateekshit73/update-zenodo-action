@@ -11,7 +11,7 @@ authors:
     family-names: Siripanich
   - given-names: Serhii
     family-names: Murza
-doi: 10.5281/zenodo.15206391
+doi: 10.5072/zenodo.176413
 repository-code: 'https://github.com/vacanza/holidays'
 abstract: >-
   Description - Test upload action
