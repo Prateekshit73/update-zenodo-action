@@ -159,12 +159,26 @@ class ZenodoAPI:
 
         try:
             metadata = self.metadata
-            new_metadata = {}
 
-            # (existing metadata processing code)
-            logger.debug("Prepared metadata update: %s", new_metadata)
+            new_metadata = {
+                "title": metadata["title"],
+                "upload_type": "software",
+                "resource_type": "software",
+                "creators": [
+                    {"name": f"{a['family-names']}, {a['given-names']}"}
+                    for a in metadata.get("authors", [])
+                ],
+                "description": metadata.get("abstract", ""),
+                "license": {"id": metadata.get("license", "")},
+                "keywords": metadata.get("keywords", []),
+                "version": metadata.get("version", "1.0.0")
+            }
             self._make_request("PUT", f"/{deposition_id}", json={"metadata": new_metadata})
             logger.info("Metadata updated successfully")
+
+        except KeyError as e:
+            logger.error("Missing required metadata field: %s", str(e))
+            raise
 
         except Exception as e:
             logger.error("Metadata update failed: %s", str(e))
