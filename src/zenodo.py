@@ -74,28 +74,38 @@ class ZenodoAPI:
         return new_deposition_id
 
     def create_version(self) -> str:
-        """Create a new version based on concept ID from metadata."""
+        """Create a new version using the DOI to fetch the concept ID."""
         try:
-            # Get concept_id from metadata or raise error
-            concept_id = self.metadata.get("concept_id")
-            if not concept_id:
-                logger.error("Missing 'concept_id' in metadata.")
-                raise KeyError("'concept_id' is required to create a new version.")
+            # Extract deposition ID from DOI
+            doi = self.metadata["doi"]
+            deposition_id = doi.split(".")[-1]  # "10.5281/zenodo.15206391" → "15206391"
 
-            # Query depositions for the concept_id
+            # Fetch the concept ID from the existing deposition
+            response = self._make_request("GET", f"/{deposition_id}")
+            concept_id = response["conceptrecid"]
+
+            # Find the latest deposition under this concept
             response = self._make_request("GET", f"?q=conceptrecid:{concept_id}")
 
-            # Check if any depositions exist
             if not response:
-                logger.info("No existing depositions found for concept ID %s. Creating a new concept.", concept_id)
-                return self.create_concept()  # Fallback to new concept
+                logger.error("No depositions found for concept ID %s", concept_id)
+                raise ValueError("No existing versions found for this concept.")
 
-            # Get the latest deposition ID
-            deposition_id = response[0]["id"]
-            response = self._make_request("POST", f"/{deposition_id}/actions/newversion")
+            # Create a new version
+            response = self._make_request("POST", f"/{response[0]['id']}/actions/newversion")
             new_deposition_id = response["id"]
             logger.info("Created new version with deposition ID: %s", new_deposition_id)
             return new_deposition_id
+
+        except KeyError as e:
+            logger.error("Missing required field in metadata: %s", str(e))
+            raise
+
+        except requests.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.error("Deposition not found for DOI: %s", doi)
+                raise ValueError("Invalid DOI or deposition ID.") from e
+            raise
 
         except KeyError as e:
             logger.error("Missing required field in metadata: %s", str(e))
