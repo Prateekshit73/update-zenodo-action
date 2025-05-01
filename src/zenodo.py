@@ -66,77 +66,75 @@ class ZenodoAPI:
             logger.error("Request failed: %s", str(e))
             raise
 
-    def _find_existing_deposition(self) -> Optional[tuple[str, str]]:
-        """Find existing deposition by DOI or version."""
-
-        try:
-            depositions = self._make_request("GET", "")
-            target_doi = self.metadata.get("doi")
-            target_version = str(self.metadata.get("version", ""))
-
-            for dep in depositions:
-                meta = dep.get("metadata", {})
-
-                if meta.get("doi") == target_doi:
-                    return dep["conceptrecid"], dep["id"]
-
-                if str(meta.get("version")) == target_version:
-                    return dep["conceptrecid"], dep["id"]
-
-            return None
-
-        except Exception as e:
-            logger.warning("Deposition search failed: %s", str(e))
-            return None
+    def create_concept(self) -> str:
+        """Create a new concept."""
+        response = self._make_request("POST", "")
+        new_deposition_id = response["id"]
+        logger.info("Created new concept with deposition ID: %s", new_deposition_id)
+        return new_deposition_id
 
     def create_version(self) -> str:
-        """Smart version creation with fallback to new deposition."""
-
+        """Create a new version based on concept ID from metadata."""
         try:
-            # Try to find existing deposition
-            existing = self._find_existing_deposition()
+            concept_id = self.metadata.get("concept_id") or self.metadata["doi"].split(".")[-1]
+            response = self._make_request("GET", f"?q=conceptrecid:{concept_id}")
+            deposition_id = response[0]["id"]
+            response = self._make_request("POST", f"/{deposition_id}/actions/newversion")
+            new_deposition_id = response["id"]
+            logger.info("Created new version with deposition ID: %s", new_deposition_id)
+            return new_deposition_id
 
-            if existing:
-                concept_id, deposition_id = existing
-                logger.info("Found existing concept %s", concept_id)
-                logger.info("Found existing deposition %s", deposition_id)
-
-                try:
-                    response = self._make_request("POST", f"/{concept_id}/actions/newversion")
-                    return response["id"]
-
-                except requests.HTTPError as e:
-                    if e.response.status_code == 404:
-                        logger.warning("Concept not found, creating new deposition")
-                        return self._create_new_deposition()
-                    raise
-
-            return self._create_new_deposition()
-
-        except Exception as e:
-            logger.error("Version creation failed: %s", str(e))
+        except KeyError as e:
+            logger.error("Missing required field in metadata: %s", str(e))
             raise
 
-    def _create_new_deposition(self) -> str:
-        """Create brand new deposition with metadata."""
 
-        deposition_data = {
-            "metadata": {
-                "title": self.metadata["title"],
-                "upload_type": "software",
-                "description": self.metadata.get("abstract", ""),
-                "creators": [
-                    {"name": f"{a['family-names']}, {a['given-names']}"}
-                    for a in self.metadata.get("authors", [])
-                ],
-                "license": {"id": self.metadata.get("license", "")},
-                "keywords": self.metadata.get("keywords", []),
-                "version": self.metadata.get("version", "1.0.0")
+    def update_metadata(self, deposition_id: str) -> None:
+        """Update deposit metadata based on metadata file data."""
+        logger.info("Updating metadata for deposition: %s", deposition_id)
+
+        metadata = self.metadata
+
+        new_metadata = {}
+
+        if title := metadata.get("title"):
+            new_metadata["title"] = title
+
+        if upload_type := metadata.get("type"):
+            new_metadata["upload_type"] = upload_type
+
+        if authors := metadata.get("authors"):
+            new_metadata["creators"] = [
+                {"name": f"{author['family-names']}, {author['given-names']}"}
+                for author in authors
+            ]
+
+        if description := metadata.get("abstract"):
+            new_metadata["description"] = description
+
+        if keywords := metadata.get("keywords"):
+            new_metadata["keywords"] = keywords
+
+        if license_id := metadata.get("license"):
+            new_metadata["license"] = {"id": license_id}
+
+        if version := metadata.get("version"):
+            new_metadata["version"] = version
+
+        if publication_date := metadata.get("date-released"):
+            new_metadata["publication_date"] = publication_date
+
+        if repository_code := metadata.get("repository-code"):
+            new_metadata["custom"] = {
+                "code:codeRepository": repository_code,
+                "code:programmingLanguage": [{"id": "python", "title": {"en": "Python"}}],
+                "code:developmentStatus": {"id": "active", "title": {"en": "Active"}},
             }
-        }
-        response = self._make_request("POST", "", json=deposition_data)
-        logger.info("Created new deposition %s", response["id"])
-        return response["id"]
+
+        response = self._make_request("GET", f"/{deposition_id}")
+        updated_metadata = {"metadata": {**response["metadata"], **new_metadata}}
+        self._make_request("PUT", f"/{deposition_id}", json=updated_metadata)
+        logger.info("Metadata updated successfully for deposition: %s", deposition_id)
 
     def full_upload_flow(self, file_paths: list[str]) -> str:
         """Complete upload workflow with error recovery."""
@@ -151,37 +149,6 @@ class ZenodoAPI:
 
         except Exception as e:
             logger.error("Upload workflow failed: %s", str(e))
-            raise
-
-    def update_metadata(self, deposition_id: str) -> None:
-        """Update deposit metadata."""
-        logger.info("Updating metadata for deposition: %s", deposition_id)
-
-        try:
-            metadata = self.metadata
-
-            new_metadata = {
-                "title": metadata["title"],
-                "upload_type": "software",
-                "resource_type": "software",
-                "creators": [
-                    {"name": f"{a['family-names']}, {a['given-names']}"}
-                    for a in metadata.get("authors", [])
-                ],
-                "description": metadata.get("abstract", ""),
-                "license": {"id": metadata.get("license", "")},
-                "keywords": metadata.get("keywords", []),
-                "version": metadata.get("version", "1.0.0")
-            }
-            self._make_request("PUT", f"/{deposition_id}", json={"metadata": new_metadata})
-            logger.info("Metadata updated successfully")
-
-        except KeyError as e:
-            logger.error("Missing required metadata field: %s", str(e))
-            raise
-
-        except Exception as e:
-            logger.error("Metadata update failed: %s", str(e))
             raise
 
     def delete_files(self, deposition_id: str) -> None:
