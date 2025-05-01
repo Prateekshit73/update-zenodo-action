@@ -76,8 +76,21 @@ class ZenodoAPI:
     def create_version(self) -> str:
         """Create a new version based on concept ID from metadata."""
         try:
-            concept_id = self.metadata.get("concept_id") or self.metadata["doi"].split(".")[-1]
+            # Get concept_id from metadata or raise error
+            concept_id = self.metadata.get("concept_id")
+            if not concept_id:
+                logger.error("Missing 'concept_id' in metadata.")
+                raise KeyError("'concept_id' is required to create a new version.")
+
+            # Query depositions for the concept_id
             response = self._make_request("GET", f"?q=conceptrecid:{concept_id}")
+
+            # Check if any depositions exist
+            if not response:
+                logger.info("No existing depositions found for concept ID %s. Creating a new concept.", concept_id)
+                return self.create_concept()  # Fallback to new concept
+
+            # Get the latest deposition ID
             deposition_id = response[0]["id"]
             response = self._make_request("POST", f"/{deposition_id}/actions/newversion")
             new_deposition_id = response["id"]
@@ -87,7 +100,6 @@ class ZenodoAPI:
         except KeyError as e:
             logger.error("Missing required field in metadata: %s", str(e))
             raise
-
 
     def update_metadata(self, deposition_id: str) -> None:
         """Update deposit metadata based on metadata file data."""
